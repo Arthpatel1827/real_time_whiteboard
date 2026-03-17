@@ -46,10 +46,25 @@ input DrawingEventInput {
 }
 
 type UserPresence {
+  type: String
+  roomId: ID
   userId: ID
   clientId: ID
+  displayName: String
+  color: String
   online: Boolean!
   lastSeen: String
+}
+
+type CursorEvent {
+  type: String
+  roomId: ID!
+  userId: ID!
+  displayName: String
+  color: String
+  x: JSON!
+  y: JSON!
+  timestamp: String
 }
 
 type Query {
@@ -63,11 +78,21 @@ type Mutation {
   joinRoom(roomId: ID!, userName: String!, clientId: ID!): UserPresence!
   leaveRoom(roomId: ID!, clientId: ID!): UserPresence!
   sendDrawingEvent(input: DrawingEventInput!): Boolean!
+  sendCursorEvent(
+    roomId: ID!
+    userId: ID!
+    displayName: String!
+    color: String!
+    x: JSON!
+    y: JSON!
+  ): Boolean!
 }
 
 type Subscription {
   drawingUpdates(roomId: ID!): DrawingEvent!
   userPresenceUpdates(roomId: ID!): UserPresence!
+  presenceUpdates(roomId: ID!): UserPresence!
+  cursorUpdates(roomId: ID!): CursorEvent!
 }
 """
 
@@ -138,6 +163,36 @@ def resolve_send_drawing_event(_, info, input):
     return True
 
 
+@mutation.field("sendCursorEvent")
+def resolve_send_cursor_event(_, info, roomId, userId, displayName, color, x, y):
+    request = info.context["request"]
+
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise ValueError("Missing Authorization header")
+
+    token = auth_header.split(" ", 1)[1].strip()
+    payload = jwt_manager.decode_token(token)
+
+    authenticated_user_id = str(payload["sub"])
+    if str(userId) != authenticated_user_id:
+        raise ValueError("User ID does not match authenticated token")
+
+    event = {
+        "type": "cursor",
+        "roomId": str(roomId),
+        "userId": str(userId),
+        "displayName": displayName,
+        "color": color,
+        "x": x,
+        "y": y,
+        "timestamp": None,
+    }
+
+    connection_registry.broadcast_cursor(room_id=roomId, event=event)
+    return True
+
+
 @subscription.source("drawingUpdates")
 async def source_drawing_updates(obj, info, roomId):
     queue = connection_registry.subscribe(room_id=roomId)
@@ -161,14 +216,62 @@ async def source_user_presence_updates(obj, info, roomId):
 
     try:
         while True:
-            message = await queue.get()
-            yield message
+            while not queue.empty():
+                queue.get_nowait()
+
+            for user in UserService.get_users_in_room(room_id=roomId):
+                yield user
+
+            while True:
+                message = await queue.get()
+                yield message
     finally:
         connection_registry.unsubscribe_presence(room_id=roomId, queue=queue)
 
 
 @subscription.field("userPresenceUpdates")
 def user_presence_updates_resolver(message, info, roomId):
+    return message
+
+
+@subscription.source("presenceUpdates")
+async def source_presence_updates(obj, info, roomId):
+    queue = connection_registry.subscribe_presence(room_id=roomId)
+
+    try:
+        while True:
+            while not queue.empty():
+                queue.get_nowait()
+
+            for user in UserService.get_users_in_room(room_id=roomId):
+                yield user
+
+            while True:
+                message = await queue.get()
+                yield message
+    finally:
+        connection_registry.unsubscribe_presence(room_id=roomId, queue=queue)
+
+
+@subscription.field("presenceUpdates")
+def presence_updates_resolver(message, info, roomId):
+    return message
+
+
+@subscription.source("cursorUpdates")
+async def source_cursor_updates(obj, info, roomId):
+    queue = connection_registry.subscribe_cursor(room_id=roomId)
+
+    try:
+        while True:
+            message = await queue.get()
+            yield message
+    finally:
+        connection_registry.unsubscribe_cursor(room_id=roomId, queue=queue)
+
+
+@subscription.field("cursorUpdates")
+def cursor_updates_resolver(message, info, roomId):
     return message
 
 

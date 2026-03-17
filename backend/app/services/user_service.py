@@ -9,21 +9,21 @@ class UserService:
     _active_users_by_room = defaultdict(dict)
 
     _CURSOR_COLORS = [
-        "#2563eb",  # blue
-        "#dc2626",  # red
-        "#16a34a",  # green
-        "#ca8a04",  # yellow
-        "#9333ea",  # purple
-        "#ea580c",  # orange
-        "#0891b2",  # cyan
-        "#db2777",  # pink
+        "#2563eb",
+        "#dc2626",
+        "#16a34a",
+        "#ca8a04",
+        "#9333ea",
+        "#ea580c",
+        "#0891b2",
+        "#db2777",
     ]
 
     @staticmethod
     def _get_user_color(client_id: str) -> str:
         client_id = str(client_id)
-        color_index = sum(ord(char) for char in client_id) % len(UserService._CURSOR_COLORS)
-        return UserService._CURSOR_COLORS[color_index]
+        index = sum(ord(char) for char in client_id) % len(UserService._CURSOR_COLORS)
+        return UserService._CURSOR_COLORS[index]
 
     @staticmethod
     def _build_presence(room_id: str, display_name: str, client_id: str, online: bool):
@@ -63,6 +63,7 @@ class UserService:
         client_id = str(client_id)
 
         existing = UserService._active_users_by_room.get(room_id, {}).pop(client_id, None)
+
         if existing:
             presence = UserService._build_presence(
                 room_id=room_id,

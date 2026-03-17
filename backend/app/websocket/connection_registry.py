@@ -20,7 +20,7 @@ class ConnectionRegistry:
     def get_room_connections(self, room_id):
         return self.connections.get(str(room_id), [])
 
-    # Drawing subscribers
+    # Drawing
     def subscribe(self, room_id):
         queue = asyncio.Queue()
         self.room_subscribers[str(room_id)].append(queue)
@@ -36,7 +36,7 @@ class ConnectionRegistry:
         for queue in self.room_subscribers.get(room_id, []):
             queue.put_nowait(event)
 
-    # Presence subscribers
+    # Presence
     def subscribe_presence(self, room_id):
         queue = asyncio.Queue()
         self.presence_subscribers[str(room_id)].append(queue)
@@ -52,7 +52,7 @@ class ConnectionRegistry:
         for queue in self.presence_subscribers.get(room_id, []):
             queue.put_nowait(event)
 
-    # Cursor subscribers
+    # Cursor
     def subscribe_cursor(self, room_id):
         queue = asyncio.Queue()
         self.cursor_subscribers[str(room_id)].append(queue)

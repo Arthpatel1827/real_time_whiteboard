@@ -6,6 +6,7 @@ class ConnectionRegistry:
     def __init__(self):
         self.room_subscribers = defaultdict(list)
         self.presence_subscribers = defaultdict(list)
+        self.cursor_subscribers = defaultdict(list)
         self.connections = defaultdict(list)
 
     def add(self, room_id, websocket):
@@ -19,6 +20,7 @@ class ConnectionRegistry:
     def get_room_connections(self, room_id):
         return self.connections.get(str(room_id), [])
 
+    # Drawing subscribers
     def subscribe(self, room_id):
         queue = asyncio.Queue()
         self.room_subscribers[str(room_id)].append(queue)
@@ -34,6 +36,7 @@ class ConnectionRegistry:
         for queue in self.room_subscribers.get(room_id, []):
             queue.put_nowait(event)
 
+    # Presence subscribers
     def subscribe_presence(self, room_id):
         queue = asyncio.Queue()
         self.presence_subscribers[str(room_id)].append(queue)
@@ -47,6 +50,22 @@ class ConnectionRegistry:
     def broadcast_presence(self, room_id, event):
         room_id = str(room_id)
         for queue in self.presence_subscribers.get(room_id, []):
+            queue.put_nowait(event)
+
+    # Cursor subscribers
+    def subscribe_cursor(self, room_id):
+        queue = asyncio.Queue()
+        self.cursor_subscribers[str(room_id)].append(queue)
+        return queue
+
+    def unsubscribe_cursor(self, room_id, queue):
+        room_id = str(room_id)
+        if room_id in self.cursor_subscribers and queue in self.cursor_subscribers[room_id]:
+            self.cursor_subscribers[room_id].remove(queue)
+
+    def broadcast_cursor(self, room_id, event):
+        room_id = str(room_id)
+        for queue in self.cursor_subscribers.get(room_id, []):
             queue.put_nowait(event)
 
 

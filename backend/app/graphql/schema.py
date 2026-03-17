@@ -12,19 +12,10 @@ from app.security.jwt_manager import jwt_manager
 from app.services.room_service import RoomService
 from app.services.drawing_service import DrawingService
 from app.services.user_service import UserService
-from app.websocket.connection_registry import ConnectionRegistry
+from app.websocket.connection_registry import connection_registry
 
-
-# ----------------------
-# JSON Scalar
-# ----------------------
 
 json_scalar = ScalarType("JSON")
-
-
-# ----------------------
-# GraphQL Type Definitions
-# ----------------------
 
 type_defs = """
 scalar JSON
@@ -80,17 +71,10 @@ type Subscription {
 }
 """
 
-
 query = QueryType()
 mutation = MutationType()
 subscription = SubscriptionType()
 
-connection_registry = ConnectionRegistry()
-
-
-# ----------------------
-# Query Resolvers
-# ----------------------
 
 @query.field("rooms")
 def resolve_rooms(_, info):
@@ -106,10 +90,6 @@ def resolve_board_history(_, info, roomId):
 def resolve_users_in_room(_, info, roomId):
     return UserService.get_users_in_room(room_id=roomId)
 
-
-# ----------------------
-# Mutation Resolvers
-# ----------------------
 
 @mutation.field("createRoom")
 def resolve_create_room(_, info, name):
@@ -158,10 +138,6 @@ def resolve_send_drawing_event(_, info, input):
     return True
 
 
-# ----------------------
-# Subscription Resolvers
-# ----------------------
-
 @subscription.source("drawingUpdates")
 async def source_drawing_updates(obj, info, roomId):
     queue = connection_registry.subscribe(room_id=roomId)
@@ -195,10 +171,6 @@ async def source_user_presence_updates(obj, info, roomId):
 def user_presence_updates_resolver(message, info, roomId):
     return message
 
-
-# ----------------------
-# Schema
-# ----------------------
 
 schema = make_executable_schema(
     type_defs,

@@ -18,7 +18,8 @@ class KafkaProducerClient:
             topic,
             json.dumps(data).encode("utf-8")
         )
-        self.producer.flush()
+        # Serve delivery callbacks / internal queue without blocking
+        self.producer.poll(0)
 
     def publish_drawing_event(self, event: dict):
         self.send_event(DRAWING_EVENTS, event)

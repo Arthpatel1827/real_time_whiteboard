@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { setAuth } from "../auth/authStorage";
-import "../styles/login.css";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -56,81 +55,80 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="login-page">
+    <div className="min-h-screen bg-[#0b0b12] text-white flex items-center justify-center relative overflow-hidden">
 
-      <div className="login-container">
+      {/* BACKGROUND */}
+      <div className="absolute inset-0 -z-10">
+        <div className="absolute w-[500px] h-[500px] bg-indigo-600/20 blur-[120px] top-[-100px] left-[-100px]" />
+        <div className="absolute w-[400px] h-[400px] bg-purple-600/20 blur-[120px] bottom-[-100px] right-[-100px]" />
+      </div>
 
-        {/* LEFT SIDE */}
-        <div className="login-left">
-          <h1>Whiteboard</h1>
-          <p>Create an account and start collaborating instantly.</p>
+      <div className="grid md:grid-cols-2 w-full max-w-5xl bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+
+        {/* LEFT */}
+        <div className="p-10 flex flex-col justify-center">
+          <h1 className="text-4xl font-bold mb-4">Whiteboard</h1>
+          <p className="text-gray-400">
+            Create an account and start collaborating instantly.
+          </p>
         </div>
 
+        {/* RIGHT */}
+        <div className="p-10 bg-white/5">
+          <h2 className="text-2xl font-semibold mb-2">Create Account</h2>
+          <p className="text-gray-400 mb-6">Register to continue</p>
 
-        {/* RIGHT SIDE */}
-        <div className="login-card">
+          <form onSubmit={handleSubmit} className="space-y-4">
 
-          <h2>Create Account</h2>
-          <p className="subtitle">Register to start using the whiteboard</p>
+            <input
+              type="text"
+              name="displayName"
+              value={form.displayName}
+              onChange={handleChange}
+              placeholder="Display Name"
+              required
+              className="w-full p-3 rounded-xl bg-black/30 border border-white/10 focus:outline-none focus:border-indigo-500"
+            />
 
-          <form onSubmit={handleSubmit}>
+            <input
+              type="email"
+              name="email"
+              value={form.email}
+              onChange={handleChange}
+              placeholder="Email"
+              required
+              className="w-full p-3 rounded-xl bg-black/30 border border-white/10 focus:outline-none focus:border-indigo-500"
+            />
 
-            <div className="input-group">
-              <label>Display Name</label>
-              <input
-                type="text"
-                name="displayName"
-                value={form.displayName}
-                onChange={handleChange}
-                placeholder="Your name"
-                required
-              />
-            </div>
+            <input
+              type="password"
+              name="password"
+              value={form.password}
+              onChange={handleChange}
+              placeholder="Password"
+              required
+              className="w-full p-3 rounded-xl bg-black/30 border border-white/10 focus:outline-none focus:border-indigo-500"
+            />
 
-            <div className="input-group">
-              <label>Email</label>
-              <input
-                type="email"
-                name="email"
-                value={form.email}
-                onChange={handleChange}
-                placeholder="you@email.com"
-                required
-              />
-            </div>
-
-            <div className="input-group">
-              <label>Password</label>
-              <input
-                type="password"
-                name="password"
-                value={form.password}
-                onChange={handleChange}
-                placeholder="Create password"
-                required
-              />
-            </div>
-
-            {error && <p className="error">{error}</p>}
+            {error && <p className="text-red-400 text-sm">{error}</p>}
 
             <button
-              className="login-btn"
               type="submit"
               disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 transition-all p-3 rounded-xl font-semibold"
             >
               {loading ? "Creating account..." : "Register"}
             </button>
-
           </form>
 
-          <p className="register">
-            Already have an account? <Link to="/login">Login</Link>
+          <p className="text-sm text-gray-400 mt-6">
+            Already have an account?{" "}
+            <Link to="/login" className="text-indigo-400 hover:underline">
+              Login
+            </Link>
           </p>
-
         </div>
-
       </div>
-
     </div>
   );
 }

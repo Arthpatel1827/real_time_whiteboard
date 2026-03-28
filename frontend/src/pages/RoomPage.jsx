@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { gql, useMutation, useQuery, useSubscription } from "@apollo/client";
 import WhiteboardCanvas from "../components/whiteboard/WhiteboardCanvas";
+import Toolbar from "../components/whiteboard/Toolbar";
 
 /* ================= GRAPHQL ================= */
 
@@ -166,12 +167,24 @@ export default function RoomPage() {
         clientId: String(user.id),
       },
     });
-  }, [roomId, user]);
+  }, [roomId, user, navigate, joinRoom]);
 
   useEffect(() => {
-    if (historyData?.boardHistory) {
-      setDrawingEvents(historyData.boardHistory);
-    }
+    if (!historyData?.boardHistory) return;
+
+    const history = historyData.boardHistory;
+
+    const lastClearIndex = [...history]
+      .map((event, index) => ({ event, index }))
+      .filter(({ event }) => event.eventType === "clear")
+      .pop()?.index;
+
+    const visibleEvents =
+      lastClearIndex !== undefined
+        ? history.slice(lastClearIndex + 1)
+        : history;
+
+    setDrawingEvents(visibleEvents);
   }, [historyData]);
 
   useEffect(() => {
@@ -185,9 +198,10 @@ export default function RoomPage() {
 
     if (event.eventType === "clear") {
       setDrawingEvents([]);
-    } else {
-      setDrawingEvents((prev) => [...prev, event]);
+      return;
     }
+
+    setDrawingEvents((prev) => [...prev, event]);
   }, [subscriptionData]);
 
   useEffect(() => {
@@ -250,39 +264,40 @@ export default function RoomPage() {
   /* ================= UI ================= */
 
   return (
-    <div className="h-screen bg-[#0b0b12] text-white overflow-hidden">
-
-      {/* TOP BAR */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center justify-between w-[90%] max-w-6xl px-6 py-3 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-xl">
-
+    <div className="relative min-h-[calc(100vh-73px)] overflow-hidden bg-white text-black dark:bg-[#0b0b12] dark:text-white">
+      <div className="absolute top-2 left-1/2 z-40 flex w-[90%] max-w-6xl -translate-x-1/2 items-center justify-between rounded-2xl border border-black/10 bg-black/5 px-4 py-2 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
         <div className="flex items-center gap-4">
-          <h1 className="font-semibold text-lg">Room {roomId}</h1>
-          <span className="text-sm text-gray-400">
+          <h1 className="text-lg font-semibold">Room {roomId}</h1>
+          <span className="text-sm text-gray-600 dark:text-gray-400">
             👥 {participants.length}
           </span>
-          <span className="w-2 h-2 bg-green-400 rounded-full" />
+          <span className="h-2 w-2 rounded-full bg-green-400" />
         </div>
 
         <div className="flex gap-3">
           <button
             onClick={handleClear}
-            className="px-4 py-2 bg-yellow-500 text-black rounded-lg hover:scale-105 transition"
+            className="rounded-lg bg-yellow-500 px-4 py-2 text-black transition hover:scale-105"
           >
             Clear
           </button>
 
           <button
             onClick={() => navigate("/")}
-            className="px-4 py-2 bg-red-500 rounded-lg hover:scale-105 transition"
+            className="rounded-lg bg-red-500 px-4 py-2 transition hover:scale-105"
           >
             Leave
           </button>
         </div>
       </div>
 
-      {/* CANVAS */}
-      <div className="w-full h-full relative">
+      <div className="absolute left-4 top-1/2 z-50 -translate-y-1/2">
+        <div className="flex flex-col items-center gap-4 rounded-2xl border border-black/10 bg-black/5 p-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+          <Toolbar color={color} onColorChange={setColor} />
+        </div>
+      </div>
 
+      <div className="relative h-full w-full pt-24">
         <div className="absolute inset-0 bg-[radial-gradient(circle,#1a1a2e_1px,transparent_1px)] bg-[size:22px_22px] opacity-30" />
 
         <WhiteboardCanvas
@@ -292,7 +307,6 @@ export default function RoomPage() {
           cursors={cursors}
           currentUser={user}
         />
-
       </div>
     </div>
   );

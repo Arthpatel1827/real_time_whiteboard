@@ -7,6 +7,7 @@ import RoomPage from './pages/RoomPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import MainLayout from './layouts/MainLayout';
 
 function App() {
   return (
@@ -17,22 +18,15 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
 
           <Route
-            path="/"
             element={
               <ProtectedRoute>
-                <HomePage />
+                <MainLayout />
               </ProtectedRoute>
             }
-          />
-
-          <Route
-            path="/room/:roomId"
-            element={
-              <ProtectedRoute>
-                <RoomPage />
-              </ProtectedRoute>
-            }
-          />
+          >
+            <Route path="/" element={<HomePage />} />
+            <Route path="/room/:roomId" element={<RoomPage />} />
+          </Route>
         </Routes>
       </BrowserRouter>
     </ApolloProvider>

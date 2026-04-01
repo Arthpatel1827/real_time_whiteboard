@@ -1,20 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { gql, useMutation, useQuery, useSubscription } from '@apollo/client';
-import WhiteboardCanvas from '../components/whiteboard/WhiteboardCanvas';
-import LogoutButton from '../components/system/LogoutButton';
+import React, { useEffect, useRef, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { gql, useMutation, useQuery, useSubscription } from "@apollo/client";
+import WhiteboardCanvas from "../components/whiteboard/WhiteboardCanvas";
+import Toolbar from "../components/whiteboard/Toolbar";
+
+/* ================= GRAPHQL ================= */
 
 const JOIN_ROOM = gql`
   mutation JoinRoom($roomId: ID!, $userName: String!, $clientId: ID!) {
     joinRoom(roomId: $roomId, userName: $userName, clientId: $clientId) {
-      type
-      roomId
       userId
-      clientId
       displayName
       color
       online
-      lastSeen
     }
   }
 `;
@@ -22,14 +20,8 @@ const JOIN_ROOM = gql`
 const LEAVE_ROOM = gql`
   mutation LeaveRoom($roomId: ID!, $clientId: ID!) {
     leaveRoom(roomId: $roomId, clientId: $clientId) {
-      type
-      roomId
       userId
-      clientId
-      displayName
-      color
       online
-      lastSeen
     }
   }
 `;
@@ -38,7 +30,6 @@ const BOARD_HISTORY = gql`
   query BoardHistory($roomId: ID!) {
     boardHistory(roomId: $roomId) {
       id
-      roomId
       userId
       eventType
       coordinates
@@ -51,14 +42,10 @@ const BOARD_HISTORY = gql`
 const USERS_IN_ROOM = gql`
   query UsersInRoom($roomId: ID!) {
     usersInRoom(roomId: $roomId) {
-      type
-      roomId
       userId
-      clientId
       displayName
       color
       online
-      lastSeen
     }
   }
 `;
@@ -67,7 +54,6 @@ const DRAWING_UPDATES = gql`
   subscription DrawingUpdates($roomId: ID!) {
     drawingUpdates(roomId: $roomId) {
       id
-      roomId
       userId
       eventType
       coordinates
@@ -77,32 +63,14 @@ const DRAWING_UPDATES = gql`
   }
 `;
 
-const PRESENCE_UPDATES = gql`
-  subscription PresenceUpdates($roomId: ID!) {
-    presenceUpdates(roomId: $roomId) {
-      type
-      roomId
-      userId
-      clientId
-      displayName
-      color
-      online
-      lastSeen
-    }
-  }
-`;
-
 const CURSOR_UPDATES = gql`
   subscription CursorUpdates($roomId: ID!) {
     cursorUpdates(roomId: $roomId) {
-      type
-      roomId
       userId
       displayName
       color
       x
       y
-      timestamp
     }
   }
 `;
@@ -114,7 +82,14 @@ const SEND_DRAWING_EVENT = gql`
 `;
 
 const SEND_CURSOR_EVENT = gql`
-  mutation SendCursorEvent($roomId: ID!, $userId: ID!, $displayName: String!, $color: String!, $x: JSON!, $y: JSON!) {
+  mutation SendCursorEvent(
+    $roomId: ID!
+    $userId: ID!
+    $displayName: String!
+    $color: String!
+    $x: JSON!
+    $y: JSON!
+  ) {
     sendCursorEvent(
       roomId: $roomId
       userId: $userId
@@ -126,75 +101,59 @@ const SEND_CURSOR_EVENT = gql`
   }
 `;
 
+/* ================= USER ================= */
+
 function getStoredUser() {
   try {
-    return JSON.parse(localStorage.getItem('whiteboard_user') || 'null');
+    return JSON.parse(localStorage.getItem("whiteboard_user") || "null");
   } catch {
     return null;
   }
 }
 
+/* ================= MAIN ================= */
+
 export default function RoomPage() {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const joinedRef = useRef(false);
-  const leftRef = useRef(false);
 
   const user = getStoredUser();
-
-  const [joinRoom, { data: joinData, loading: joinLoading, error: joinError }] =
-    useMutation(JOIN_ROOM);
-
-  const [leaveRoom] = useMutation(LEAVE_ROOM);
-  const [sendDrawingEvent] = useMutation(SEND_DRAWING_EVENT);
-  const [sendCursorEvent] = useMutation(SEND_CURSOR_EVENT);
 
   const [drawingEvents, setDrawingEvents] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [cursors, setCursors] = useState({});
+  const [color, setColor] = useState("#3b82f6");
 
-  const {
-    data: historyData,
-    loading: historyLoading,
-    error: historyError,
-  } = useQuery(BOARD_HISTORY, {
-    variables: { roomId },
-    fetchPolicy: 'network-only',
-    skip: !user,
-  });
+  const [joinRoom] = useMutation(JOIN_ROOM);
+  const [sendDrawingEvent] = useMutation(SEND_DRAWING_EVENT);
+  const [sendCursorEvent] = useMutation(SEND_CURSOR_EVENT);
 
-  const {
-    data: usersData,
-    loading: usersLoading,
-    error: usersError,
-    refetch: refetchUsersInRoom,
-  } = useQuery(USERS_IN_ROOM, {
-    variables: { roomId },
-    fetchPolicy: 'network-only',
-    skip: !user,
-  });
-
-  const {
-    data: subscriptionData,
-    error: subscriptionError,
-  } = useSubscription(DRAWING_UPDATES, {
+  const { data: historyData } = useQuery(BOARD_HISTORY, {
     variables: { roomId },
     skip: !user,
   });
 
-  const { data: presenceData, error: presenceError } = useSubscription(PRESENCE_UPDATES, {
+  const { data: usersData } = useQuery(USERS_IN_ROOM, {
     variables: { roomId },
     skip: !user,
   });
 
-  const { data: cursorData, error: cursorError } = useSubscription(CURSOR_UPDATES, {
+  const { data: subscriptionData } = useSubscription(DRAWING_UPDATES, {
     variables: { roomId },
     skip: !user,
   });
+
+  const { data: cursorData } = useSubscription(CURSOR_UPDATES, {
+    variables: { roomId },
+    skip: !user,
+  });
+
+  /* ================= EFFECTS ================= */
 
   useEffect(() => {
     if (!user) {
-      navigate('/login');
+      navigate("/login");
       return;
     }
 
@@ -207,331 +166,148 @@ export default function RoomPage() {
         userName: user.displayName,
         clientId: String(user.id),
       },
-    }).catch((err) => {
-      console.error('Join room failed:', err);
     });
-  }, [roomId, joinRoom, navigate, user]);
+  }, [roomId, user, navigate, joinRoom]);
 
   useEffect(() => {
-    const history = historyData?.boardHistory;
-    if (!history) return;
+    if (!historyData?.boardHistory) return;
 
-    setDrawingEvents(history);
+    const history = historyData.boardHistory;
+
+    const lastClearIndex = [...history]
+      .map((event, index) => ({ event, index }))
+      .filter(({ event }) => event.eventType === "clear")
+      .pop()?.index;
+
+    const visibleEvents =
+      lastClearIndex !== undefined
+        ? history.slice(lastClearIndex + 1)
+        : history;
+
+    setDrawingEvents(visibleEvents);
   }, [historyData]);
 
   useEffect(() => {
-    const usersInRoom = usersData?.usersInRoom;
-    if (!usersInRoom) return;
-
-    setParticipants((prev) => {
-      const merged = new Map();
-
-      prev.forEach((participant) => {
-        merged.set(String(participant.userId), participant);
-      });
-
-      usersInRoom.forEach((participant) => {
-        if (participant.online) {
-          merged.set(String(participant.userId), participant);
-        }
-      });
-
-      return Array.from(merged.values()).filter((participant) => participant.online);
-    });
+    const users = usersData?.usersInRoom;
+    if (users) setParticipants(users);
   }, [usersData]);
 
   useEffect(() => {
-    const newEvent = subscriptionData?.drawingUpdates;
-    if (!newEvent) return;
+    const event = subscriptionData?.drawingUpdates;
+    if (!event) return;
 
-    setDrawingEvents((prev) => {
-      if (newEvent.eventType === 'clear') {
-        return [];
-      }
-
-      const alreadyExists = prev.some((event) => event.id === newEvent.id);
-      if (alreadyExists) return prev;
-
-      return [...prev, newEvent];
-    });
-  }, [subscriptionData]);
-
-  useEffect(() => {
-    const joinedUser = joinData?.joinRoom;
-    if (!joinedUser) return;
-
-    const joinedUserId = String(joinedUser.userId);
-
-    setParticipants((prev) => {
-      const exists = prev.some(
-        (participant) => String(participant.userId) === joinedUserId
-      );
-
-      if (exists) {
-        return prev.map((participant) =>
-          String(participant.userId) === joinedUserId ? joinedUser : participant
-        );
-      }
-
-      return [...prev, joinedUser];
-    });
-
-    refetchUsersInRoom?.().catch((err) => {
-      console.error('Failed to refetch users in room:', err);
-    });
-  }, [joinData, refetchUsersInRoom]);
-
-  useEffect(() => {
-    const presenceEvent = presenceData?.presenceUpdates;
-    if (!presenceEvent) return;
-
-    const incomingUserId = String(presenceEvent.userId);
-
-    setParticipants((prev) => {
-      if (presenceEvent.online) {
-        const exists = prev.some(
-          (participant) => String(participant.userId) === incomingUserId
-        );
-
-        if (exists) {
-          return prev.map((participant) =>
-            String(participant.userId) === incomingUserId
-              ? { ...participant, ...presenceEvent }
-              : participant
-          );
-        }
-
-        return [...prev, presenceEvent];
-      }
-
-      return prev.filter(
-        (participant) => String(participant.userId) !== incomingUserId
-      );
-    });
-
-    if (!presenceEvent.online) {
-      setCursors((prev) => {
-        const updated = { ...prev };
-        delete updated[incomingUserId];
-        return updated;
-      });
+    if (event.eventType === "clear") {
+      setDrawingEvents([]);
+      return;
     }
-  }, [presenceData]);
+
+    setDrawingEvents((prev) => [...prev, event]);
+  }, [subscriptionData]);
 
   useEffect(() => {
     const cursorEvent = cursorData?.cursorUpdates;
     if (!cursorEvent) return;
 
-    if (String(cursorEvent.userId) === String(user?.id)) return;
-
     setCursors((prev) => ({
       ...prev,
-      [String(cursorEvent.userId)]: cursorEvent,
+      [cursorEvent.userId]: cursorEvent,
     }));
-  }, [cursorData, user]);
+  }, [cursorData]);
 
-  useEffect(() => {
-    if (!user || !roomId) return;
-
-    const clientId = String(user.id);
-
-    const notifyLeave = async () => {
-      if (leftRef.current) return;
-      leftRef.current = true;
-
-      try {
-        await leaveRoom({
-          variables: {
-            roomId,
-            clientId,
-          },
-        });
-
-        setParticipants((prev) =>
-          prev.filter((participant) => String(participant.userId) !== clientId)
-        );
-
-        setCursors((prev) => {
-          const updated = { ...prev };
-          delete updated[clientId];
-          return updated;
-        });
-      } catch (err) {
-        console.error('Leave room failed:', err);
-      }
-    };
-
-    const handleBeforeUnload = () => {
-      const graphqlUrl = `${window.location.origin.replace(/\/$/, '')}/graphql/`;
-
-      const body = JSON.stringify({
-        query: `
-          mutation LeaveRoom($roomId: ID!, $clientId: ID!) {
-            leaveRoom(roomId: $roomId, clientId: $clientId) {
-              userId
-              online
-            }
-          }
-        `,
-        variables: {
-          roomId,
-          clientId,
-        },
-      });
-
-      try {
-        navigator.sendBeacon?.(
-          graphqlUrl,
-          new Blob([body], { type: 'application/json' })
-        );
-      } catch {
-        // fallback skipped
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      notifyLeave();
-    };
-  }, [leaveRoom, roomId, user]);
+  /* ================= HANDLERS ================= */
 
   const handleDraw = async (event) => {
-    try {
-      await sendDrawingEvent({
-        variables: {
-          input: {
-            roomId,
-            eventType: event.eventType,
-            coordinates: event.coordinates,
-            color: event.color || '#000000',
-            timestamp: event.timestamp || new Date().toISOString(),
-          },
+    await sendDrawingEvent({
+      variables: {
+        input: {
+          roomId,
+          eventType: "stroke",
+          coordinates: event.coordinates,
+          color,
+          timestamp: new Date().toISOString(),
         },
-      });
-    } catch (err) {
-      console.error('Failed to send drawing event:', err);
-    }
+      },
+    });
   };
 
   const handleClear = async () => {
-    try {
-      setDrawingEvents([]);
-      await sendDrawingEvent({
-        variables: {
-          input: {
-            roomId,
-            eventType: 'clear',
-            coordinates: {},
-            color: '#000000',
-            timestamp: new Date().toISOString(),
-          },
+    setDrawingEvents([]);
+
+    await sendDrawingEvent({
+      variables: {
+        input: {
+          roomId,
+          eventType: "clear",
+          coordinates: {},
+          color,
+          timestamp: new Date().toISOString(),
         },
-      });
-    } catch (err) {
-      console.error('Failed to clear board:', err);
-    }
+      },
+    });
   };
 
-  const handleCursorMove = async ({ x, y, color }) => {
+  const handleCursorMove = async ({ x, y }) => {
     if (!user) return;
 
-    try {
-      await sendCursorEvent({
-        variables: {
-          roomId,
-          userId: String(user.id),
-          displayName: user.displayName,
-          color,
-          x,
-          y,
-        },
-      });
-    } catch (err) {
-      console.error('Failed to send cursor event:', err);
-    }
+    await sendCursorEvent({
+      variables: {
+        roomId,
+        userId: String(user.id),
+        displayName: user.displayName,
+        color,
+        x,
+        y,
+      },
+    });
   };
 
-  const connectionState =
-    subscriptionError || presenceError || cursorError ? 'disconnected' : 'connected';
+  /* ================= UI ================= */
 
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <h1>Whiteboard Room</h1>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <p>Room ID: {roomId}</p>
-          <p>Participants: {participants.length}</p>
-          <Link to="/">← Back</Link>
-          <LogoutButton />
+    <div className="relative min-h-[calc(100vh-73px)] overflow-hidden bg-white text-black dark:bg-[#0b0b12] dark:text-white">
+      <div className="absolute top-2 left-1/2 z-40 flex w-[90%] max-w-6xl -translate-x-1/2 items-center justify-between rounded-2xl border border-black/10 bg-black/5 px-4 py-2 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+        <div className="flex items-center gap-4">
+          <h1 className="text-lg font-semibold">Room {roomId}</h1>
+          <span className="text-sm text-gray-600 dark:text-gray-400">
+            👥 {participants.length}
+          </span>
+          <span className="h-2 w-2 rounded-full bg-green-400" />
         </div>
-      </header>
 
-      <main>
-        {joinLoading && <p>Joining room...</p>}
-        {joinError && <p>Failed to join room.</p>}
-        {joinData && <p>Joined successfully.</p>}
-
-        {historyLoading && <p>Loading board history...</p>}
-        {historyError && <p>Failed to load board history.</p>}
-
-        {usersLoading && <p>Loading active users...</p>}
-        {usersError && <p>Failed to load active users.</p>}
-
-        <div style={{ marginBottom: '12px' }}>
-          <strong>Active users:</strong>
-          <div
-            style={{
-              display: 'flex',
-              gap: '10px',
-              flexWrap: 'wrap',
-              marginTop: '8px',
-            }}
+        <div className="flex gap-3">
+          <button
+            onClick={handleClear}
+            className="rounded-lg bg-yellow-500 px-4 py-2 text-black transition hover:scale-105"
           >
-            {participants.map((participant) => (
-              <div
-                key={String(participant.userId)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 10px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '999px',
-                  background: '#ffffff',
-                }}
-              >
-                <span
-                  style={{
-                    width: '10px',
-                    height: '10px',
-                    borderRadius: '50%',
-                    background: participant.color || '#000000',
-                    display: 'inline-block',
-                  }}
-                />
-                <span>
-                  {String(participant.userId) === String(user?.id)
-                    ? `${participant.displayName || 'You'} (You)`
-                    : participant.displayName || `User ${participant.userId}`}
-                </span>
-              </div>
-            ))}
-          </div>
+            Clear
+          </button>
+
+          <button
+            onClick={() => navigate("/")}
+            className="rounded-lg bg-red-500 px-4 py-2 transition hover:scale-105"
+          >
+            Leave
+          </button>
         </div>
+      </div>
+
+      <div className="absolute left-4 top-1/2 z-50 -translate-y-1/2">
+        <div className="flex flex-col items-center gap-4 rounded-2xl border border-black/10 bg-black/5 p-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+          <Toolbar color={color} onColorChange={setColor} />
+        </div>
+      </div>
+
+      <div className="relative h-full w-full pt-24">
+        <div className="absolute inset-0 bg-[radial-gradient(circle,#1a1a2e_1px,transparent_1px)] bg-[size:22px_22px] opacity-30" />
 
         <WhiteboardCanvas
           drawingEvents={drawingEvents}
           onDraw={handleDraw}
-          onClear={handleClear}
           onCursorMove={handleCursorMove}
-          connectionState={connectionState}
           cursors={cursors}
           currentUser={user}
         />
-      </main>
+      </div>
     </div>
   );
 }

@@ -1,21 +1,22 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { formatDrawingEvent } from '../../utils/eventFormatter';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { formatDrawingEvent } from "../../utils/eventFormatter";
 
 function getUserColor(userId) {
   const colors = [
-    '#2563eb',
-    '#dc2626',
-    '#16a34a',
-    '#ca8a04',
-    '#9333ea',
-    '#ea580c',
-    '#0891b2',
-    '#db2777',
+    "#2563eb",
+    "#dc2626",
+    "#16a34a",
+    "#ca8a04",
+    "#9333ea",
+    "#ea580c",
+    "#0891b2",
+    "#db2777",
   ];
 
-  const id = String(userId || '');
+  const id = String(userId || "");
   const index =
-    id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0) % colors.length;
+    id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) %
+    colors.length;
 
   return colors[index];
 }
@@ -23,9 +24,7 @@ function getUserColor(userId) {
 export default function WhiteboardCanvas({
   drawingEvents,
   onDraw,
-  onClear,
   onCursorMove,
-  connectionState,
   cursors = {},
   currentUser,
 }) {
@@ -39,44 +38,59 @@ export default function WhiteboardCanvas({
     return getUserColor(currentUser?.id);
   }, [currentUser]);
 
+  // 🔥 HANDLE CANVAS RESIZE (IMPORTANT FIX)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const resizeCanvas = () => {
+      const rect = canvas.getBoundingClientRect();
+
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+
+      redrawCanvas(); // redraw after resize
+    };
+
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
+
+    return () => window.removeEventListener("resize", resizeCanvas);
+  }, []);
+
+  // 🔥 CLEAR CANVAS
   const clearCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
   };
 
+  // 🔥 DRAW SINGLE EVENT
   const drawSingleEvent = (event) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
-
-    if (event?.eventType === 'clear') {
-      clearCanvas();
-      return;
-    }
+    const ctx = canvas.getContext("2d");
 
     const parsed = formatDrawingEvent(event);
     if (!parsed?.start || !parsed?.end) return;
 
-    ctx.strokeStyle = parsed.color || '#000000';
+    ctx.strokeStyle = parsed.color || "#000000";
     ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
+    ctx.lineCap = "round";
+
     ctx.beginPath();
     ctx.moveTo(parsed.start.x, parsed.start.y);
     ctx.lineTo(parsed.end.x, parsed.end.y);
     ctx.stroke();
   };
 
+  // 🔥 REDRAW
   const redrawCanvas = () => {
     clearCanvas();
-    drawingEvents.forEach((event) => {
-      drawSingleEvent(event);
-    });
+    drawingEvents.forEach((event) => drawSingleEvent(event));
     lastRenderedCountRef.current = drawingEvents.length;
   };
 
@@ -90,8 +104,7 @@ export default function WhiteboardCanvas({
     }
 
     if (drawingEvents.length === lastRenderedCountRef.current + 1) {
-      const latestEvent = drawingEvents[drawingEvents.length - 1];
-      drawSingleEvent(latestEvent);
+      drawSingleEvent(drawingEvents[drawingEvents.length - 1]);
       lastRenderedCountRef.current = drawingEvents.length;
       return;
     }
@@ -100,9 +113,7 @@ export default function WhiteboardCanvas({
   }, [drawingEvents]);
 
   const getCanvasCoordinates = (e) => {
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-
+    const rect = canvasRef.current.getBoundingClientRect();
     return {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
@@ -113,6 +124,7 @@ export default function WhiteboardCanvas({
     setIsDrawing(true);
 
     const start = getCanvasCoordinates(e);
+
     canvasRef.current.dataset.lastX = start.x;
     canvasRef.current.dataset.lastY = start.y;
   };
@@ -122,8 +134,9 @@ export default function WhiteboardCanvas({
     if (!canvas) return;
 
     const point = getCanvasCoordinates(e);
-
     const now = Date.now();
+
+    // 👥 CURSOR SEND
     if (now - lastCursorSentRef.current >= 30) {
       lastCursorSentRef.current = now;
 
@@ -152,18 +165,16 @@ export default function WhiteboardCanvas({
     canvas.dataset.lastX = end.x;
     canvas.dataset.lastY = end.y;
 
+    // draw locally
     drawSingleEvent({
-      eventType: 'stroke',
       coordinates: { start, end },
-      color: '#000000',
-      timestamp: new Date().toISOString(),
+      color: "#000000",
     });
 
+    // send event
     onDraw({
-      eventType: 'stroke',
       coordinates: { start, end },
-      color: '#000000',
-      timestamp: new Date().toISOString(),
+      color: "#000000",
     });
   };
 
@@ -172,86 +183,41 @@ export default function WhiteboardCanvas({
   };
 
   return (
-    <div className="whiteboard-wrapper">
-      <div className="whiteboard-toolbar">
-        <button onClick={onClear}>Clear Board</button>
-        <div className="connection-status">Connection: {connectionState}</div>
-      </div>
+    <div className="w-full h-full relative">
 
-      <div
-        className="whiteboard-canvas-shell"
-        style={{
-          position: 'relative',
-          border: '2px solid #d1d5db',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          background: '#ffffff',
-        }}
-      >
-        <canvas
-          ref={canvasRef}
-          width={960}
-          height={540}
-          className="whiteboard-canvas-element"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-          style={{
-            display: 'block',
-            width: '100%',
-            maxWidth: '960px',
-            background: '#ffffff',
-            touchAction: 'none',
-            cursor: 'crosshair',
-          }}
-        />
+      {/* 🎨 CANVAS */}
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full touch-none cursor-crosshair"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+      />
 
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            pointerEvents: 'none',
-          }}
-        >
-          {Object.values(cursors).map((cursor) => (
+      {/* 👥 CURSORS */}
+      <div className="absolute inset-0 pointer-events-none">
+        {Object.values(cursors).map((cursor) => (
+          <div
+            key={cursor.userId}
+            style={{
+              position: "absolute",
+              left: cursor.x,
+              top: cursor.y,
+              transform: "translate(-2px, -2px)",
+            }}
+          >
             <div
-              key={cursor.userId}
               style={{
-                position: 'absolute',
-                left: cursor.x,
-                top: cursor.y,
-                transform: 'translate(-2px, -2px)',
+                width: "10px",
+                height: "10px",
+                borderRadius: "50%",
+                background: cursor.color,
+                border: "2px solid white",
               }}
-            >
-              <div
-                style={{
-                  width: '12px',
-                  height: '12px',
-                  borderRadius: '50%',
-                  background: cursor.color || '#000000',
-                  border: '2px solid #ffffff',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
-                }}
-              />
-              <div
-                style={{
-                  marginTop: '4px',
-                  display: 'inline-block',
-                  padding: '2px 6px',
-                  borderRadius: '999px',
-                  background: cursor.color || '#000000',
-                  color: '#ffffff',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {cursor.displayName || `User ${cursor.userId}`}
-              </div>
-            </div>
-          ))}
-        </div>
+            />
+          </div>
+        ))}
       </div>
     </div>
   );

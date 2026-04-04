@@ -3,16 +3,14 @@ import WhiteboardCanvas from "../components/whiteboard/WhiteboardCanvas";
 import Toolbar from "../components/whiteboard/Toolbar";
 import { useDrawingEvents } from "../hooks/useDrawingEvents";
 
-export default function WhiteboardRoom({ roomId, userId, onLeave }) {
+export default function WhiteboardRoom({ roomId, onLeave }) {
   const {
     drawingEvents,
     sendDrawingEvent,
     connectionState,
   } = useDrawingEvents({
     roomId,
-    userId,
   });
-
   const [color, setColor] = useState("#3b82f6");
 
   useEffect(() => {}, [roomId]);

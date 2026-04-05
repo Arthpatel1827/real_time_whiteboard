@@ -17,11 +17,11 @@ const JOIN_ROOM = gql`
   }
 `;
 
-const LEAVE_ROOM = gql`
-  mutation LeaveRoom($roomId: ID!, $clientId: ID!) {
-    leaveRoom(roomId: $roomId, clientId: $clientId) {
-      userId
-      online
+const GET_ROOM = gql`
+  query GetRoom($roomId: ID!) {
+    room(roomId: $roomId) {
+      id
+      name
     }
   }
 `;
@@ -129,6 +129,11 @@ export default function RoomPage() {
   const [sendDrawingEvent] = useMutation(SEND_DRAWING_EVENT);
   const [sendCursorEvent] = useMutation(SEND_CURSOR_EVENT);
 
+  // ✅ NEW: fetch room name from backend
+  const { data: roomData } = useQuery(GET_ROOM, {
+    variables: { roomId },
+  });
+
   const { data: historyData } = useQuery(BOARD_HISTORY, {
     variables: { roomId },
     skip: !user,
@@ -188,8 +193,9 @@ export default function RoomPage() {
   }, [historyData]);
 
   useEffect(() => {
-    const users = usersData?.usersInRoom;
-    if (users) setParticipants(users);
+    if (usersData?.usersInRoom) {
+      setParticipants(usersData.usersInRoom);
+    }
   }, [usersData]);
 
   useEffect(() => {
@@ -265,12 +271,23 @@ export default function RoomPage() {
 
   return (
     <div className="relative min-h-[calc(100vh-73px)] overflow-hidden bg-white text-black dark:bg-[#0b0b12] dark:text-white">
+
+      {/* 🔝 TOP BAR */}
       <div className="absolute top-2 left-1/2 z-40 flex w-[90%] max-w-6xl -translate-x-1/2 items-center justify-between rounded-2xl border border-black/10 bg-black/5 px-4 py-2 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+
         <div className="flex items-center gap-4">
-          <h1 className="text-lg font-semibold">Room {roomId}</h1>
+
+          {/* ✅ UPDATED TITLE */}
+          <h1 className="text-lg font-semibold">
+            {roomData?.room?.name
+              ? `${roomData.room.name}'s Room`
+              : `Room ${roomId}`}
+          </h1>
+
           <span className="text-sm text-gray-600 dark:text-gray-400">
             👥 {participants.length}
           </span>
+
           <span className="h-2 w-2 rounded-full bg-green-400" />
         </div>
 
@@ -289,14 +306,17 @@ export default function RoomPage() {
             Leave
           </button>
         </div>
+
       </div>
 
+      {/* 🛠 TOOLBAR */}
       <div className="absolute left-4 top-1/2 z-50 -translate-y-1/2">
         <div className="flex flex-col items-center gap-4 rounded-2xl border border-black/10 bg-black/5 p-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
           <Toolbar color={color} onColorChange={setColor} />
         </div>
       </div>
 
+      {/* 🎨 CANVAS */}
       <div className="relative h-full w-full pt-24">
         <div className="absolute inset-0 bg-[radial-gradient(circle,#1a1a2e_1px,transparent_1px)] bg-[size:22px_22px] opacity-30" />
 

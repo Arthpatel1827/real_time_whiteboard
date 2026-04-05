@@ -35,7 +35,9 @@ export default function CreateRoomInline({ onCancel }) {
             });
 
             if (data?.createRoom?.id) {
-                navigate(`/room/${data.createRoom.id}`);
+                navigate(`/room/${data.createRoom.id}`, {
+                    state: { roomName: data.createRoom.name }
+                });
             }
         } catch (err) {
             console.error(err);

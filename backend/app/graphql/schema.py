@@ -69,6 +69,7 @@ type CursorEvent {
 
 type Query {
   rooms: [Room!]!
+  room(roomId: ID!): Room
   boardHistory(roomId: ID!): [DrawingEvent!]!
   usersInRoom(roomId: ID!): [UserPresence!]!
 }
@@ -101,9 +102,16 @@ mutation = MutationType()
 subscription = SubscriptionType()
 
 
+# ✅ FIXED: no extra param
 @query.field("rooms")
 def resolve_rooms(_, info):
     return RoomService.get_rooms()
+
+
+# ✅ NEW: required for room name
+@query.field("room")
+def resolve_room(_, info, roomId):
+    return RoomService.get_room(roomId)
 
 
 @query.field("boardHistory")

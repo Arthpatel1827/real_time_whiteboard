@@ -46,3 +46,18 @@ class RoomService:
             db.commit()
             db.refresh(room)
             return room
+
+@staticmethod
+def get_room(room_id: str):
+    with get_db() as db:
+        room = db.query(Room).filter(Room.id == int(room_id)).first()
+
+        if not room:
+            return None
+
+        return {
+            "id": str(room.id),
+            "name": room.name,
+            "participantCount": UserService.get_participant_count(str(room.id)),
+            "createdAt": room.created_at.isoformat() if room.created_at else None,
+        }

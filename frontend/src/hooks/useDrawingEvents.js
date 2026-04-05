@@ -3,7 +3,7 @@ import { useMutation, useSubscription } from '@apollo/client';
 import { SEND_DRAWING_EVENT } from '../graphql/mutations/sendDrawingEvent';
 import { DRAWING_UPDATES } from '../graphql/subscriptions/drawingUpdates';
 
-export function useDrawingEvents({ roomId, userId }) {
+export function useDrawingEvents({ roomId }) {
   const [drawingEvents, setDrawingEvents] = useState([]);
   const [connectionState, setConnectionState] = useState('connecting');
 
@@ -36,13 +36,18 @@ export function useDrawingEvents({ roomId, userId }) {
     return async (event) => {
       try {
         await sendDrawingEventMutation({
-          variables: { input: { ...event, roomId, userId } },
+          variables: {
+            input: {
+              ...event,
+              roomId, // ✅ ONLY roomId (userId removed)
+            },
+          },
         });
       } catch (e) {
         console.error('Failed to send drawing event', e);
       }
     };
-  }, [roomId, userId, sendDrawingEventMutation]);
+  }, [roomId, sendDrawingEventMutation]);
 
   return {
     drawingEvents,

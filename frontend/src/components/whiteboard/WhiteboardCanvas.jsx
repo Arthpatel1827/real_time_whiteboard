@@ -38,18 +38,16 @@ export default function WhiteboardCanvas({
     return getUserColor(currentUser?.id);
   }, [currentUser]);
 
-  // 🔥 HANDLE CANVAS RESIZE (IMPORTANT FIX)
+  /* ================= RESIZE ================= */
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const resizeCanvas = () => {
       const rect = canvas.getBoundingClientRect();
-
       canvas.width = rect.width;
       canvas.height = rect.height;
-
-      redrawCanvas(); // redraw after resize
+      redrawCanvas();
     };
 
     resizeCanvas();
@@ -58,26 +56,24 @@ export default function WhiteboardCanvas({
     return () => window.removeEventListener("resize", resizeCanvas);
   }, []);
 
-  // 🔥 CLEAR CANVAS
+  /* ================= DRAW ================= */
+
   const clearCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
   };
 
-  // 🔥 DRAW SINGLE EVENT
   const drawSingleEvent = (event) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
-
     const parsed = formatDrawingEvent(event);
+
     if (!parsed?.start || !parsed?.end) return;
 
-    ctx.strokeStyle = parsed.color || "#000000";
+    ctx.strokeStyle = parsed.color || "#000";
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
 
@@ -87,10 +83,9 @@ export default function WhiteboardCanvas({
     ctx.stroke();
   };
 
-  // 🔥 REDRAW
   const redrawCanvas = () => {
     clearCanvas();
-    drawingEvents.forEach((event) => drawSingleEvent(event));
+    drawingEvents.forEach(drawSingleEvent);
     lastRenderedCountRef.current = drawingEvents.length;
   };
 
@@ -112,6 +107,8 @@ export default function WhiteboardCanvas({
     redrawCanvas();
   }, [drawingEvents]);
 
+  /* ================= POINTER ================= */
+
   const getCanvasCoordinates = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
     return {
@@ -122,7 +119,6 @@ export default function WhiteboardCanvas({
 
   const handlePointerDown = (e) => {
     setIsDrawing(true);
-
     const start = getCanvasCoordinates(e);
 
     canvasRef.current.dataset.lastX = start.x;
@@ -136,14 +132,13 @@ export default function WhiteboardCanvas({
     const point = getCanvasCoordinates(e);
     const now = Date.now();
 
-    // 👥 CURSOR SEND
+    /* 🔥 SEND CURSOR */
     if (now - lastCursorSentRef.current >= 30) {
       lastCursorSentRef.current = now;
 
       onCursorMove?.({
         x: point.x,
         y: point.y,
-        color: currentUserColor,
       });
     }
 
@@ -165,22 +160,22 @@ export default function WhiteboardCanvas({
     canvas.dataset.lastX = end.x;
     canvas.dataset.lastY = end.y;
 
-    // draw locally
     drawSingleEvent({
       coordinates: { start, end },
-      color: "#000000",
+      color: "#000",
     });
 
-    // send event
     onDraw({
       coordinates: { start, end },
-      color: "#000000",
+      color: "#000",
     });
   };
 
   const handlePointerUp = () => {
     setIsDrawing(false);
   };
+
+  /* ================= UI ================= */
 
   return (
     <div className="w-full h-full relative">
@@ -204,18 +199,38 @@ export default function WhiteboardCanvas({
               position: "absolute",
               left: cursor.x,
               top: cursor.y,
-              transform: "translate(-2px, -2px)",
+              transform: "translate(-50%, -50%)",
             }}
           >
-            <div
-              style={{
-                width: "10px",
-                height: "10px",
-                borderRadius: "50%",
-                background: cursor.color,
-                border: "2px solid white",
-              }}
-            />
+            <div className="flex flex-col items-center">
+              
+              {/* DOT */}
+              <div
+                style={{
+                  width: "10px",
+                  height: "10px",
+                  borderRadius: "50%",
+                  background: cursor.color,
+                  border: "2px solid white",
+                }}
+              />
+
+              {/* NAME */}
+              <span
+                style={{
+                  fontSize: "10px",
+                  background: "rgba(0,0,0,0.7)",
+                  color: "white",
+                  padding: "2px 4px",
+                  borderRadius: "4px",
+                  marginTop: "2px",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {cursor.displayName}
+              </span>
+
+            </div>
           </div>
         ))}
       </div>

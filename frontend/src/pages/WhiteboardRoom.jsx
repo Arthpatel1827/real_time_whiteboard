@@ -1,13 +1,12 @@
-import React, { useState } from "react";
-import { useQuery } from "@apollo/client";
+import React, { useEffect, useState } from "react";
+import { useQuery, useSubscription, useMutation, gql } from "@apollo/client";
 import WhiteboardCanvas from "../components/whiteboard/WhiteboardCanvas";
 import Toolbar from "../components/whiteboard/Toolbar";
 import { useDrawingEvents } from "../hooks/useDrawingEvents";
 import { getCurrentUser } from "../auth/authStorage";
-import { gql } from "@apollo/client";
 
+/* ================= GRAPHQL ================= */
 
-// ✅ GraphQL Query
 const GET_ROOM = gql`
   query GetRoom($roomId: ID!) {
     room(roomId: $roomId) {
@@ -17,20 +16,72 @@ const GET_ROOM = gql`
   }
 `;
 
-export default function WhiteboardRoom({ roomId, onLeave }) {
+const USERS_IN_ROOM = gql`
+  query UsersInRoom($roomId: ID!) {
+    usersInRoom(roomId: $roomId) {
+      userId
+      displayName
+      color
+      online
+    }
+  }
+`;
 
-  // ✅ get logged-in user
+const CURSOR_UPDATES = gql`
+  subscription CursorUpdates($roomId: ID!) {
+    cursorUpdates(roomId: $roomId) {
+      userId
+      displayName
+      color
+      x
+      y
+    }
+  }
+`;
+
+const SEND_CURSOR_EVENT = gql`
+  mutation SendCursorEvent(
+    $roomId: ID!
+    $userId: ID!
+    $displayName: String!
+    $color: String!
+    $x: JSON!
+    $y: JSON!
+  ) {
+    sendCursorEvent(
+      roomId: $roomId
+      userId: $userId
+      displayName: $displayName
+      color: $color
+      x: $x
+      y: $y
+    )
+  }
+`;
+
+/* ================= COMPONENT ================= */
+
+export default function WhiteboardRoom({ roomId, onLeave }) {
   const user = getCurrentUser();
   const userId = user?.id;
 
-  // ✅ fetch room name
-  const { data, loading } = useQuery(GET_ROOM, {
+  const [color, setColor] = useState("#3b82f6");
+  const [cursors, setCursors] = useState({});
+
+  /* ================= QUERIES ================= */
+
+  const { data: roomData, loading } = useQuery(GET_ROOM, {
     variables: { roomId },
   });
 
-  const roomName = data?.room?.name || `Room ${roomId}`;
+  const { data: usersData } = useQuery(USERS_IN_ROOM, {
+    variables: { roomId },
+  });
 
-  // ✅ drawing hook (FIXED userId)
+  const users = usersData?.usersInRoom || [];
+
+  /* ================= DRAWING ================= */
+
   const {
     drawingEvents,
     sendDrawingEvent,
@@ -40,7 +91,42 @@ export default function WhiteboardRoom({ roomId, onLeave }) {
     userId,
   });
 
-  const [color, setColor] = useState("#3b82f6");
+  /* ================= CURSORS ================= */
+
+  const [sendCursorEvent] = useMutation(SEND_CURSOR_EVENT);
+
+  const { data: cursorData } = useSubscription(CURSOR_UPDATES, {
+    variables: { roomId },
+  });
+
+  useEffect(() => {
+    const c = cursorData?.cursorUpdates;
+    if (!c) return;
+
+    setCursors((prev) => ({
+      ...prev,
+      [c.userId]: c,
+    }));
+  }, [cursorData]);
+
+  const handleCursorMove = ({ x, y }) => {
+    if (!user) return;
+
+    sendCursorEvent({
+      variables: {
+        roomId,
+        userId: String(userId),
+        displayName: user.displayName,
+        color,
+        x,
+        y,
+      },
+    });
+  };
+
+  const roomName = roomData?.room?.name || `Room ${roomId}`;
+
+  /* ================= UI ================= */
 
   return (
     <div className="h-screen bg-[#0b0b12] text-white overflow-hidden">
@@ -53,9 +139,18 @@ export default function WhiteboardRoom({ roomId, onLeave }) {
             {loading ? "Loading..." : roomName}
           </h1>
 
-          <span className="text-sm text-gray-400">
-            👥 {drawingEvents.length}
-          </span>
+          {/* ✅ USER LIST */}
+          <div className="flex items-center gap-3">
+            {users.map((u) => (
+              <div key={u.userId} className="flex items-center gap-1 text-sm">
+                <span
+                  className="w-2 h-2 rounded-full"
+                  style={{ backgroundColor: u.color }}
+                />
+                <span>{u.displayName}</span>
+              </div>
+            ))}
+          </div>
 
           <span
             className={`w-2 h-2 rounded-full ${
@@ -83,7 +178,7 @@ export default function WhiteboardRoom({ roomId, onLeave }) {
         </div>
       </div>
 
-      {/* 🛠 FLOATING TOOLBAR */}
+      {/* 🛠 TOOLBAR */}
       <div className="absolute left-4 top-1/2 -translate-y-1/2 z-50">
         <div className="flex flex-col items-center gap-4 p-3 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-xl">
           <Toolbar
@@ -94,10 +189,9 @@ export default function WhiteboardRoom({ roomId, onLeave }) {
         </div>
       </div>
 
-      {/* 🎨 CANVAS AREA */}
+      {/* 🎨 CANVAS */}
       <div className="w-full h-full relative">
 
-        {/* GRID BACKGROUND */}
         <div className="absolute inset-0 bg-[radial-gradient(circle,#1a1a2e_1px,transparent_1px)] bg-[size:22px_22px] opacity-30" />
 
         <WhiteboardCanvas
@@ -105,16 +199,9 @@ export default function WhiteboardRoom({ roomId, onLeave }) {
           onDraw={(event) =>
             sendDrawingEvent({ ...event, color })
           }
+          onCursorMove={handleCursorMove}
+          cursors={cursors}
         />
-
-        {/* 🔻 ZOOM CONTROLS */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-2 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-xl">
-
-          <button className="text-lg hover:scale-110 transition">➖</button>
-          <span className="text-sm text-gray-300">100%</span>
-          <button className="text-lg hover:scale-110 transition">➕</button>
-
-        </div>
 
       </div>
     </div>

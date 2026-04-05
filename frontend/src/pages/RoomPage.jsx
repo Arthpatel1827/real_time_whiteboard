@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { gql, useMutation, useQuery, useSubscription } from "@apollo/client";
 import WhiteboardCanvas from "../components/whiteboard/WhiteboardCanvas";
 import Toolbar from "../components/whiteboard/Toolbar";
@@ -13,6 +13,15 @@ const JOIN_ROOM = gql`
       displayName
       color
       online
+    }
+  }
+`;
+
+const GET_ROOM = gql`
+  query GetRoom($roomId: ID!) {
+    room(roomId: $roomId) {
+      id
+      name
     }
   }
 `;
@@ -107,11 +116,8 @@ function getStoredUser() {
 export default function RoomPage() {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation(); // ✅ NEW
-
-  const roomName = location.state?.roomName; // ✅ NEW
-
   const joinedRef = useRef(false);
+
   const user = getStoredUser();
 
   const [drawingEvents, setDrawingEvents] = useState([]);
@@ -122,6 +128,11 @@ export default function RoomPage() {
   const [joinRoom] = useMutation(JOIN_ROOM);
   const [sendDrawingEvent] = useMutation(SEND_DRAWING_EVENT);
   const [sendCursorEvent] = useMutation(SEND_CURSOR_EVENT);
+
+  // ✅ NEW: fetch room name from backend
+  const { data: roomData } = useQuery(GET_ROOM, {
+    variables: { roomId },
+  });
 
   const { data: historyData } = useQuery(BOARD_HISTORY, {
     variables: { roomId },
@@ -265,9 +276,12 @@ export default function RoomPage() {
       <div className="absolute top-2 left-1/2 z-40 flex w-[90%] max-w-6xl -translate-x-1/2 items-center justify-between rounded-2xl border border-black/10 bg-black/5 px-4 py-2 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
 
         <div className="flex items-center gap-4">
-          {/* ✅ FIXED HERE */}
+
+          {/* ✅ UPDATED TITLE */}
           <h1 className="text-lg font-semibold">
-            {roomName || `Room ${roomId}`}
+            {roomData?.room?.name
+              ? `${roomData.room.name}'s Room`
+              : `Room ${roomId}`}
           </h1>
 
           <span className="text-sm text-gray-600 dark:text-gray-400">

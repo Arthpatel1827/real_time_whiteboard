@@ -27,9 +27,12 @@ export default function WhiteboardCanvas({
   onCursorMove,
   cursors = {},
   currentUser,
+  tool = "pencil",
+  color = "#000000",
 }) {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const startPointRef = useRef(null);
   const lastSentRef = useRef(0);
   const lastCursorSentRef = useRef(0);
   const lastRenderedCountRef = useRef(0);
@@ -38,7 +41,6 @@ export default function WhiteboardCanvas({
     return getUserColor(currentUser?.id);
   }, [currentUser]);
 
-  /* ================= RESIZE ================= */
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -56,8 +58,6 @@ export default function WhiteboardCanvas({
     return () => window.removeEventListener("resize", resizeCanvas);
   }, []);
 
-  /* ================= DRAW ================= */
-
   const clearCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -73,9 +73,34 @@ export default function WhiteboardCanvas({
 
     if (!parsed?.start || !parsed?.end) return;
 
-    ctx.strokeStyle = parsed.color || "#000";
-    ctx.lineWidth = 2;
+    const eventTool = event.tool || event.eventType || "pencil";
+    const strokeColor =
+      eventTool === "eraser"
+        ? "#0b0b12"
+        : parsed.color || event.color || "#000000";
+
+    ctx.strokeStyle = strokeColor;
+    ctx.fillStyle = strokeColor;
+    ctx.lineWidth = eventTool === "eraser" ? 12 : 2;
     ctx.lineCap = "round";
+
+    if (eventTool === "rectangle") {
+      const width = parsed.end.x - parsed.start.x;
+      const height = parsed.end.y - parsed.start.y;
+      ctx.strokeRect(parsed.start.x, parsed.start.y, width, height);
+      return;
+    }
+
+    if (eventTool === "circle") {
+      const radius = Math.sqrt(
+        Math.pow(parsed.end.x - parsed.start.x, 2) +
+          Math.pow(parsed.end.y - parsed.start.y, 2)
+      );
+      ctx.beginPath();
+      ctx.arc(parsed.start.x, parsed.start.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    }
 
     ctx.beginPath();
     ctx.moveTo(parsed.start.x, parsed.start.y);
@@ -107,8 +132,6 @@ export default function WhiteboardCanvas({
     redrawCanvas();
   }, [drawingEvents]);
 
-  /* ================= POINTER ================= */
-
   const getCanvasCoordinates = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
     return {
@@ -118,8 +141,9 @@ export default function WhiteboardCanvas({
   };
 
   const handlePointerDown = (e) => {
-    setIsDrawing(true);
     const start = getCanvasCoordinates(e);
+    setIsDrawing(true);
+    startPointRef.current = start;
 
     canvasRef.current.dataset.lastX = start.x;
     canvasRef.current.dataset.lastY = start.y;
@@ -132,7 +156,6 @@ export default function WhiteboardCanvas({
     const point = getCanvasCoordinates(e);
     const now = Date.now();
 
-    /* 🔥 SEND CURSOR */
     if (now - lastCursorSentRef.current >= 30) {
       lastCursorSentRef.current = now;
 
@@ -143,6 +166,21 @@ export default function WhiteboardCanvas({
     }
 
     if (!isDrawing) return;
+
+    if (tool === "rectangle" || tool === "circle") {
+      redrawCanvas();
+
+      drawSingleEvent({
+        coordinates: {
+          start: startPointRef.current,
+          end: point,
+        },
+        color,
+        tool,
+      });
+
+      return;
+    }
 
     if (now - lastSentRef.current < 20) return;
     lastSentRef.current = now;
@@ -160,37 +198,51 @@ export default function WhiteboardCanvas({
     canvas.dataset.lastX = end.x;
     canvas.dataset.lastY = end.y;
 
-    drawSingleEvent({
+    const localEvent = {
       coordinates: { start, end },
-      color: "#000",
-    });
+      color,
+      tool,
+    };
 
-    onDraw({
-      coordinates: { start, end },
-      color: "#000",
-    });
+    drawSingleEvent(localEvent);
+    onDraw(localEvent);
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e) => {
+    if (!isDrawing) return;
+
+    const end = getCanvasCoordinates(e);
+
+    if (tool === "rectangle" || tool === "circle") {
+      const shapeEvent = {
+        coordinates: {
+          start: startPointRef.current,
+          end,
+        },
+        color,
+        tool,
+      };
+
+      redrawCanvas();
+      drawSingleEvent(shapeEvent);
+      onDraw(shapeEvent);
+    }
+
     setIsDrawing(false);
+    startPointRef.current = null;
   };
-
-  /* ================= UI ================= */
 
   return (
     <div className="w-full h-full relative">
-
-      {/* 🎨 CANVAS */}
       <canvas
         ref={canvasRef}
         className="w-full h-full touch-none cursor-crosshair"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
+        onPointerLeave={() => setIsDrawing(false)}
       />
 
-      {/* 👥 CURSORS */}
       <div className="absolute inset-0 pointer-events-none">
         {Object.values(cursors).map((cursor) => (
           <div
@@ -203,19 +255,15 @@ export default function WhiteboardCanvas({
             }}
           >
             <div className="flex flex-col items-center">
-              
-              {/* DOT */}
               <div
                 style={{
                   width: "10px",
                   height: "10px",
                   borderRadius: "50%",
-                  background: cursor.color,
+                  background: cursor.color || currentUserColor,
                   border: "2px solid white",
                 }}
               />
-
-              {/* NAME */}
               <span
                 style={{
                   fontSize: "10px",
@@ -229,7 +277,6 @@ export default function WhiteboardCanvas({
               >
                 {cursor.displayName}
               </span>
-
             </div>
           </div>
         ))}

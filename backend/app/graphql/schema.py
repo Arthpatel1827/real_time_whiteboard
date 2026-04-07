@@ -76,6 +76,7 @@ type Query {
 
 type Mutation {
   createRoom(name: String!): Room!
+  deleteRoom(roomId: ID!): Boolean!
   joinRoom(roomId: ID!, userName: String!, clientId: ID!): UserPresence!
   leaveRoom(roomId: ID!, clientId: ID!): UserPresence!
   sendDrawingEvent(input: DrawingEventInput!): Boolean!
@@ -102,13 +103,11 @@ mutation = MutationType()
 subscription = SubscriptionType()
 
 
-# ✅ FIXED: no extra param
 @query.field("rooms")
 def resolve_rooms(_, info):
     return RoomService.get_rooms()
 
 
-# ✅ NEW: required for room name
 @query.field("room")
 def resolve_room(_, info, roomId):
     return RoomService.get_room(roomId)
@@ -127,6 +126,11 @@ def resolve_users_in_room(_, info, roomId):
 @mutation.field("createRoom")
 def resolve_create_room(_, info, name):
     return RoomService.create_room(name=name)
+
+
+@mutation.field("deleteRoom")
+def resolve_delete_room(_, info, roomId):
+    return RoomService.delete_room(room_id=roomId)
 
 
 @mutation.field("joinRoom")

@@ -1,9 +1,21 @@
 import React from "react";
 
-export default function Toolbar({ color, onColorChange, onLeave }) {
+export default function Toolbar({
+  color,
+  onColorChange,
+  tool,
+  onToolChange,
+  onLeave,
+}) {
+  const toolButtonClass = (toolName) =>
+    `w-10 h-10 rounded-xl flex items-center justify-center transition ${
+      tool === toolName
+        ? "bg-blue-500 text-white"
+        : "bg-white/10 hover:bg-blue-500"
+    }`;
+
   return (
     <div className="flex flex-col items-center gap-4">
-
       {/* COLOR */}
       <input
         type="color"
@@ -13,23 +25,30 @@ export default function Toolbar({ color, onColorChange, onLeave }) {
       />
 
       {/* TOOLS */}
-      <button className="w-10 h-10 rounded-xl bg-white/10 hover:bg-blue-500 flex items-center justify-center transition">
+      <button
+        onClick={() => onToolChange("pencil")}
+        className={toolButtonClass("pencil")}
+        title="Pencil"
+      >
         ✏️
       </button>
 
-      <button className="w-10 h-10 rounded-xl bg-white/10 hover:bg-blue-500 flex items-center justify-center transition">
-        🧽
-      </button>
-
-      <button className="w-10 h-10 rounded-xl bg-white/10 hover:bg-blue-500 flex items-center justify-center transition">
+      <button
+        onClick={() => onToolChange("rectangle")}
+        className={toolButtonClass("rectangle")}
+        title="Rectangle"
+      >
         ⬛
       </button>
 
-      <button className="w-10 h-10 rounded-xl bg-white/10 hover:bg-blue-500 flex items-center justify-center transition">
+      <button
+        onClick={() => onToolChange("circle")}
+        className={toolButtonClass("circle")}
+        title="Circle"
+      >
         ⚪
       </button>
 
-      {/* SPACER */}
       <div className="h-6" />
 
       {/* LEAVE */}

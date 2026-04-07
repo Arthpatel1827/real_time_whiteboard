@@ -125,11 +125,13 @@ export default function RoomPage() {
   const [cursors, setCursors] = useState({});
   const [color, setColor] = useState("#3b82f6");
 
+  // ✅ TOOL STATE
+  const [tool, setTool] = useState("pencil");
+
   const [joinRoom] = useMutation(JOIN_ROOM);
   const [sendDrawingEvent] = useMutation(SEND_DRAWING_EVENT);
   const [sendCursorEvent] = useMutation(SEND_CURSOR_EVENT);
 
-  // ✅ NEW: fetch room name from backend
   const { data: roomData } = useQuery(GET_ROOM, {
     variables: { roomId },
   });
@@ -230,6 +232,7 @@ export default function RoomPage() {
           eventType: "stroke",
           coordinates: event.coordinates,
           color,
+          // ❌ tool REMOVED (fixes error)
           timestamp: new Date().toISOString(),
         },
       },
@@ -276,8 +279,6 @@ export default function RoomPage() {
       <div className="absolute top-2 left-1/2 z-40 flex w-[90%] max-w-6xl -translate-x-1/2 items-center justify-between rounded-2xl border border-black/10 bg-black/5 px-4 py-2 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
 
         <div className="flex items-center gap-4">
-
-          {/* ✅ UPDATED TITLE */}
           <h1 className="text-lg font-semibold">
             {roomData?.room?.name
               ? `${roomData.room.name}'s Room`
@@ -306,13 +307,18 @@ export default function RoomPage() {
             Leave
           </button>
         </div>
-
       </div>
 
       {/* 🛠 TOOLBAR */}
       <div className="absolute left-4 top-1/2 z-50 -translate-y-1/2">
         <div className="flex flex-col items-center gap-4 rounded-2xl border border-black/10 bg-black/5 p-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
-          <Toolbar color={color} onColorChange={setColor} />
+          <Toolbar 
+            color={color}
+            onColorChange={setColor}
+            tool={tool}
+            onToolChange={setTool}
+            onLeave={() => {}}
+          />
         </div>
       </div>
 
@@ -322,10 +328,12 @@ export default function RoomPage() {
 
         <WhiteboardCanvas
           drawingEvents={drawingEvents}
-          onDraw={handleDraw}
+          onDraw={(event) => handleDraw({ ...event, tool })}
           onCursorMove={handleCursorMove}
           cursors={cursors}
           currentUser={user}
+          tool={tool}
+          color={color}
         />
       </div>
     </div>

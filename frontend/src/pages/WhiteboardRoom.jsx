@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useSubscription, useMutation, gql } from "@apollo/client";
-import WhiteboardCanvas from "../components/whiteboard/WhiteboardCanvas";
+import WhiteboardCanvas from "../components/whiteboard/WhiteboardCanvas.jsx";
 import Toolbar from "../components/whiteboard/Toolbar";
 import { useDrawingEvents } from "../hooks/useDrawingEvents";
 import { getCurrentUser } from "../auth/authStorage";
@@ -66,6 +66,10 @@ export default function WhiteboardRoom({ roomId, onLeave }) {
   const userId = user?.id;
 
   const [color, setColor] = useState("#3b82f6");
+
+  // ✅ ADD TOOL STATE (FIX)
+  const [tool, setTool] = useState("pencil");
+
   const [cursors, setCursors] = useState({});
 
   /* ================= QUERIES ================= */
@@ -139,7 +143,6 @@ export default function WhiteboardRoom({ roomId, onLeave }) {
             {loading ? "Loading..." : roomName}
           </h1>
 
-          {/* ✅ USER LIST */}
           <div className="flex items-center gap-3">
             {users.map((u) => (
               <div key={u.userId} className="flex items-center gap-1 text-sm">
@@ -184,6 +187,8 @@ export default function WhiteboardRoom({ roomId, onLeave }) {
           <Toolbar
             color={color}
             onColorChange={setColor}
+            tool={tool}                 // ✅ FIX
+            onToolChange={setTool}      // ✅ FIX
             onLeave={onLeave}
           />
         </div>
@@ -197,10 +202,13 @@ export default function WhiteboardRoom({ roomId, onLeave }) {
         <WhiteboardCanvas
           drawingEvents={drawingEvents}
           onDraw={(event) =>
-            sendDrawingEvent({ ...event, color })
+            sendDrawingEvent({ ...event, color, tool }) // ✅ tool added
           }
           onCursorMove={handleCursorMove}
           cursors={cursors}
+          currentUser={user}   // ✅ FIX FOR CURSOR NAME
+          tool={tool}          // ✅ FIX FOR DRAWING LOGIC
+          color={color}
         />
 
       </div>

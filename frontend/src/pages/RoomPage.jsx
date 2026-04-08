@@ -6,6 +6,15 @@ import Toolbar from "../components/whiteboard/Toolbar";
 
 /* ================= GRAPHQL ================= */
 
+const GET_ROOM = gql`
+  query GetRoom($roomId: ID!) {
+    room(roomId: $roomId) {
+      id
+      name
+    }
+  }
+`;
+
 const JOIN_ROOM = gql`
   mutation JoinRoom($roomId: ID!, $userName: String!, $clientId: ID!) {
     joinRoom(roomId: $roomId, userName: $userName, clientId: $clientId) {
@@ -147,6 +156,12 @@ export default function RoomPage() {
   const joinedRef = useRef(false);
   const leftRef = useRef(false);
 
+  const drawBufferRef = useRef([]);
+  const flushFrameRef = useRef(null);
+
+  const lastDrawSentAtRef = useRef(0);
+  const lastCursorSentAtRef = useRef(0);
+
   const user = getStoredUser();
 
   const clientIdRef = useRef(generateClientId());
@@ -163,18 +178,20 @@ export default function RoomPage() {
   const [sendDrawingEvent] = useMutation(SEND_DRAWING_EVENT);
   const [sendCursorEvent] = useMutation(SEND_CURSOR_EVENT);
 
+  const { data: roomData } = useQuery(GET_ROOM, {
+    variables: { roomId },
+    skip: !user || !roomId,
+  });
+
   const { data: historyData } = useQuery(BOARD_HISTORY, {
     variables: { roomId },
     skip: !user,
   });
 
-  const {
-    data: usersData,
-    refetch: refetchUsers,
-  } = useQuery(USERS_IN_ROOM, {
+  const { data: usersData, refetch: refetchUsers } = useQuery(USERS_IN_ROOM, {
     variables: { roomId },
     skip: !user,
-    pollInterval: 1500,
+    pollInterval: 5000,
     fetchPolicy: "network-only",
   });
 
@@ -192,6 +209,24 @@ export default function RoomPage() {
     variables: { roomId },
     skip: !user,
   });
+
+  const roomName = roomData?.room?.name || "Whiteboard";
+
+  const flushDrawBuffer = () => {
+    flushFrameRef.current = null;
+
+    if (drawBufferRef.current.length === 0) return;
+
+    const bufferedEvents = drawBufferRef.current;
+    drawBufferRef.current = [];
+
+    setDrawingEvents((prev) => [...prev, ...bufferedEvents]);
+  };
+
+  const scheduleDrawFlush = () => {
+    if (flushFrameRef.current) return;
+    flushFrameRef.current = requestAnimationFrame(flushDrawBuffer);
+  };
 
   useEffect(() => {
     if (!user) {
@@ -269,6 +304,7 @@ export default function RoomPage() {
         ? history.slice(lastClearIndex + 1)
         : history;
 
+    drawBufferRef.current = [];
     setDrawingEvents(visibleEvents);
   }, [historyData]);
 
@@ -287,20 +323,20 @@ export default function RoomPage() {
       const filtered = prev.filter((p) => p.clientId !== update.clientId);
       return update.online ? [...filtered, update] : filtered;
     });
-
-    refetchUsers().catch(() => {});
-  }, [presenceData, refetchUsers]);
+  }, [presenceData]);
 
   useEffect(() => {
     const event = subscriptionData?.drawingUpdates;
     if (!event) return;
 
     if (event.eventType === "clear") {
+      drawBufferRef.current = [];
       setDrawingEvents([]);
       return;
     }
 
-    setDrawingEvents((prev) => [...prev, event]);
+    drawBufferRef.current.push(event);
+    scheduleDrawFlush();
   }, [subscriptionData]);
 
   useEffect(() => {
@@ -313,40 +349,71 @@ export default function RoomPage() {
     }));
   }, [cursorData]);
 
-  const handleDraw = async (event) => {
-    await sendDrawingEvent({
+  useEffect(() => {
+    return () => {
+      if (flushFrameRef.current) {
+        cancelAnimationFrame(flushFrameRef.current);
+      }
+    };
+  }, []);
+
+  const handleDraw = (event) => {
+    const now = performance.now();
+    const eventType = event.tool || "pencil";
+
+    if (eventType === "pencil" && now - lastDrawSentAtRef.current < 32) {
+      return;
+    }
+
+    lastDrawSentAtRef.current = now;
+
+    sendDrawingEvent({
       variables: {
         input: {
           roomId,
-          eventType: event.tool || "pencil",
+          eventType,
           coordinates: event.coordinates,
           color: event.color || color,
           timestamp: new Date().toISOString(),
         },
       },
+    }).catch((error) => {
+      console.error("Failed to send drawing event:", error);
     });
   };
 
   const handleClear = async () => {
+    drawBufferRef.current = [];
     setDrawingEvents([]);
 
-    await sendDrawingEvent({
-      variables: {
-        input: {
-          roomId,
-          eventType: "clear",
-          coordinates: {},
-          color,
-          timestamp: new Date().toISOString(),
+    try {
+      await sendDrawingEvent({
+        variables: {
+          input: {
+            roomId,
+            eventType: "clear",
+            coordinates: {},
+            color,
+            timestamp: new Date().toISOString(),
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      console.error("Failed to clear whiteboard:", error);
+    }
   };
 
-  const handleCursorMove = async ({ x, y }) => {
+  const handleCursorMove = ({ x, y }) => {
     if (!user) return;
 
-    await sendCursorEvent({
+    const now = performance.now();
+    if (now - lastCursorSentAtRef.current < 60) {
+      return;
+    }
+
+    lastCursorSentAtRef.current = now;
+
+    sendCursorEvent({
       variables: {
         roomId,
         userId: String(user.id),
@@ -355,6 +422,8 @@ export default function RoomPage() {
         x,
         y,
       },
+    }).catch((error) => {
+      console.error("Failed to send cursor event:", error);
     });
   };
 
@@ -378,10 +447,10 @@ export default function RoomPage() {
   };
 
   return (
-    <div className="relative min-h-[calc(100vh-73px)] overflow-hidden bg-white text-black dark:bg-[#0b0b12] dark:text-white">
-      <div className="absolute top-20 left-1/2 z-40 flex w-[90%] max-w-6xl -translate-x-1/2 items-center justify-between rounded-2xl border border-black/10 bg-black/5 px-6 py-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+    <div className="relative h-[calc(100vh-73px)] overflow-hidden bg-white text-black dark:bg-[#0b0b12] dark:text-white">
+      <div className="absolute top-2 left-1/2 z-40 flex w-[90%] max-w-6xl -translate-x-1/2 items-center justify-between rounded-2xl border border-black/10 bg-black/5 px-6 py-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
         <div className="flex items-center gap-4">
-          <h1 className="text-lg font-semibold">Main Whiteboard's Room</h1>
+          <h1 className="text-lg font-semibold">{roomName}'s Room</h1>
 
           <span className="text-sm text-gray-600 dark:text-gray-400">
             👥 {participants.length}
@@ -419,18 +488,20 @@ export default function RoomPage() {
         </div>
       </div>
 
-      <div className="relative h-full w-full pt-24">
+      <div className="absolute inset-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle,#1a1a2e_1px,transparent_1px)] bg-[size:22px_22px] opacity-30" />
 
-        <WhiteboardCanvas
-          drawingEvents={drawingEvents}
-          onDraw={handleDraw}
-          onCursorMove={handleCursorMove}
-          cursors={cursors}
-          currentUser={user}
-          tool={tool}
-          color={color}
-        />
+        <div className="absolute inset-0 pt-24">
+          <WhiteboardCanvas
+            drawingEvents={drawingEvents}
+            onDraw={handleDraw}
+            onCursorMove={handleCursorMove}
+            cursors={cursors}
+            currentUser={user}
+            tool={tool}
+            color={color}
+          />
+        </div>
       </div>
     </div>
   );

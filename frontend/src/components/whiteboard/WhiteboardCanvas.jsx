@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { formatDrawingEvent } from "../../utils/eventFormatter";
 
 function getUserColor(userId) {
@@ -21,6 +21,49 @@ function getUserColor(userId) {
   return colors[index];
 }
 
+function getStrokeColor(event, parsed) {
+  return parsed?.color || event?.color || "#000000";
+}
+
+function drawEventOnContext(ctx, event) {
+  if (!ctx || !event) return;
+
+  const parsed = formatDrawingEvent(event);
+  if (!parsed?.start || !parsed?.end) return;
+
+  const eventTool = event.tool || event.eventType || "pencil";
+  const strokeColor = getStrokeColor(event, parsed);
+
+  ctx.strokeStyle = strokeColor;
+  ctx.fillStyle = strokeColor;
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  if (eventTool === "rectangle") {
+    const width = parsed.end.x - parsed.start.x;
+    const height = parsed.end.y - parsed.start.y;
+    ctx.strokeRect(parsed.start.x, parsed.start.y, width, height);
+    return;
+  }
+
+  if (eventTool === "circle") {
+    const radius = Math.sqrt(
+      Math.pow(parsed.end.x - parsed.start.x, 2) +
+        Math.pow(parsed.end.y - parsed.start.y, 2)
+    );
+    ctx.beginPath();
+    ctx.arc(parsed.start.x, parsed.start.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    return;
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(parsed.start.x, parsed.start.y);
+  ctx.lineTo(parsed.end.x, parsed.end.y);
+  ctx.stroke();
+}
+
 export default function WhiteboardCanvas({
   drawingEvents,
   onDraw,
@@ -30,186 +73,208 @@ export default function WhiteboardCanvas({
   tool = "pencil",
   color = "#000000",
 }) {
-  const canvasRef = useRef(null);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const committedCanvasRef = useRef(null);
+  const previewCanvasRef = useRef(null);
+
+  const isDrawingRef = useRef(false);
   const startPointRef = useRef(null);
+  const lastPointRef = useRef(null);
   const lastSentRef = useRef(0);
   const lastCursorSentRef = useRef(0);
   const lastRenderedCountRef = useRef(0);
+  const previewFrameRef = useRef(null);
+  const previewEventRef = useRef(null);
 
   const currentUserColor = useMemo(() => {
     return getUserColor(currentUser?.id);
   }, [currentUser]);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const resizeCanvas = () => {
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width;
-      canvas.height = rect.height;
-      redrawCanvas();
-    };
-
-    resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
-
-    return () => window.removeEventListener("resize", resizeCanvas);
-  }, []);
-
-  const clearCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+  const clearContext = (ctx) => {
+    if (!ctx?.canvas) return;
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   };
 
-  const drawSingleEvent = (event) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    const parsed = formatDrawingEvent(event);
-
-    if (!parsed?.start || !parsed?.end) return;
-
-    const eventTool = event.tool || event.eventType || "pencil";
-    const strokeColor =
-      eventTool === "eraser"
-        ? "#0b0b12"
-        : parsed.color || event.color || "#000000";
-
-    ctx.strokeStyle = strokeColor;
-    ctx.fillStyle = strokeColor;
-    ctx.lineWidth = eventTool === "eraser" ? 12 : 2;
-    ctx.lineCap = "round";
-
-    if (eventTool === "rectangle") {
-      const width = parsed.end.x - parsed.start.x;
-      const height = parsed.end.y - parsed.start.y;
-      ctx.strokeRect(parsed.start.x, parsed.start.y, width, height);
-      return;
-    }
-
-    if (eventTool === "circle") {
-      const radius = Math.sqrt(
-        Math.pow(parsed.end.x - parsed.start.x, 2) +
-          Math.pow(parsed.end.y - parsed.start.y, 2)
-      );
-      ctx.beginPath();
-      ctx.arc(parsed.start.x, parsed.start.y, radius, 0, Math.PI * 2);
-      ctx.stroke();
-      return;
-    }
-
-    ctx.beginPath();
-    ctx.moveTo(parsed.start.x, parsed.start.y);
-    ctx.lineTo(parsed.end.x, parsed.end.y);
-    ctx.stroke();
+  const getCommittedContext = () => {
+    const canvas = committedCanvasRef.current;
+    return canvas ? canvas.getContext("2d") : null;
   };
 
-  const redrawCanvas = () => {
-    clearCanvas();
-    drawingEvents.forEach(drawSingleEvent);
+  const getPreviewContext = () => {
+    const canvas = previewCanvasRef.current;
+    return canvas ? canvas.getContext("2d") : null;
+  };
+
+  const clearPreviewCanvas = () => {
+    clearContext(getPreviewContext());
+  };
+
+  const redrawCommittedCanvas = () => {
+    const ctx = getCommittedContext();
+    if (!ctx) return;
+
+    clearContext(ctx);
+    drawingEvents.forEach((event) => drawEventOnContext(ctx, event));
     lastRenderedCountRef.current = drawingEvents.length;
   };
 
+  const syncCanvasSize = () => {
+    const container = committedCanvasRef.current?.parentElement;
+    const committedCanvas = committedCanvasRef.current;
+    const previewCanvas = previewCanvasRef.current;
+
+    if (!container || !committedCanvas || !previewCanvas) return;
+
+    const rect = container.getBoundingClientRect();
+    const width = Math.max(1, Math.floor(rect.width));
+    const height = Math.max(1, Math.floor(rect.height));
+
+    if (
+      committedCanvas.width !== width ||
+      committedCanvas.height !== height ||
+      previewCanvas.width !== width ||
+      previewCanvas.height !== height
+    ) {
+      committedCanvas.width = width;
+      committedCanvas.height = height;
+      previewCanvas.width = width;
+      previewCanvas.height = height;
+
+      redrawCommittedCanvas();
+      clearPreviewCanvas();
+    }
+  };
+
   useEffect(() => {
-    if (!canvasRef.current) return;
+    syncCanvasSize();
+
+    const handleResize = () => {
+      syncCanvasSize();
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    const committedCtx = getCommittedContext();
+    if (!committedCtx) return;
 
     if (drawingEvents.length === 0) {
-      clearCanvas();
+      clearContext(committedCtx);
+      clearPreviewCanvas();
       lastRenderedCountRef.current = 0;
       return;
     }
 
-    if (drawingEvents.length === lastRenderedCountRef.current + 1) {
-      drawSingleEvent(drawingEvents[drawingEvents.length - 1]);
-      lastRenderedCountRef.current = drawingEvents.length;
+    if (drawingEvents.length < lastRenderedCountRef.current) {
+      redrawCommittedCanvas();
       return;
     }
 
-    redrawCanvas();
+    if (drawingEvents.length === lastRenderedCountRef.current) {
+      return;
+    }
+
+    const newEvents = drawingEvents.slice(lastRenderedCountRef.current);
+    newEvents.forEach((event) => drawEventOnContext(committedCtx, event));
+    lastRenderedCountRef.current = drawingEvents.length;
   }, [drawingEvents]);
 
   const getCanvasCoordinates = (e) => {
-    const rect = canvasRef.current.getBoundingClientRect();
+    const rect = committedCanvasRef.current.getBoundingClientRect();
     return {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
     };
   };
 
+  const renderPreview = () => {
+    previewFrameRef.current = null;
+
+    const ctx = getPreviewContext();
+    if (!ctx) return;
+
+    clearContext(ctx);
+
+    if (previewEventRef.current) {
+      drawEventOnContext(ctx, previewEventRef.current);
+    }
+  };
+
+  const schedulePreviewRender = () => {
+    if (previewFrameRef.current) return;
+    previewFrameRef.current = requestAnimationFrame(renderPreview);
+  };
+
   const handlePointerDown = (e) => {
     const start = getCanvasCoordinates(e);
-    setIsDrawing(true);
+    isDrawingRef.current = true;
     startPointRef.current = start;
-
-    canvasRef.current.dataset.lastX = start.x;
-    canvasRef.current.dataset.lastY = start.y;
+    lastPointRef.current = start;
   };
 
   const handlePointerMove = (e) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
     const point = getCanvasCoordinates(e);
-    const now = Date.now();
+    const now = performance.now();
 
-    if (now - lastCursorSentRef.current >= 30) {
+    if (now - lastCursorSentRef.current >= 60) {
       lastCursorSentRef.current = now;
-
-      onCursorMove?.({
-        x: point.x,
-        y: point.y,
-      });
+      onCursorMove?.({ x: point.x, y: point.y });
     }
 
-    if (!isDrawing) return;
+    if (!isDrawingRef.current) return;
 
     if (tool === "rectangle" || tool === "circle") {
-      redrawCanvas();
-
-      drawSingleEvent({
+      previewEventRef.current = {
         coordinates: {
           start: startPointRef.current,
           end: point,
         },
         color,
         tool,
-      });
+      };
 
+      schedulePreviewRender();
       return;
     }
 
-    if (now - lastSentRef.current < 20) return;
+    if (now - lastSentRef.current < 32) {
+      previewEventRef.current = {
+        coordinates: {
+          start: lastPointRef.current,
+          end: point,
+        },
+        color,
+        tool,
+      };
+      schedulePreviewRender();
+      return;
+    }
+
     lastSentRef.current = now;
 
-    const start = {
-      x: Number(canvas.dataset.lastX),
-      y: Number(canvas.dataset.lastY),
-    };
-
-    const end = {
-      x: point.x,
-      y: point.y,
-    };
-
-    canvas.dataset.lastX = end.x;
-    canvas.dataset.lastY = end.y;
-
     const localEvent = {
-      coordinates: { start, end },
+      coordinates: {
+        start: lastPointRef.current,
+        end: point,
+      },
       color,
       tool,
     };
 
-    drawSingleEvent(localEvent);
-    onDraw(localEvent);
+    const committedCtx = getCommittedContext();
+    drawEventOnContext(committedCtx, localEvent);
+
+    previewEventRef.current = null;
+    clearPreviewCanvas();
+
+    lastPointRef.current = point;
+
+    onDraw?.(localEvent);
   };
 
   const handlePointerUp = (e) => {
-    if (!isDrawing) return;
+    if (!isDrawingRef.current) return;
 
     const end = getCanvasCoordinates(e);
 
@@ -223,27 +288,53 @@ export default function WhiteboardCanvas({
         tool,
       };
 
-      redrawCanvas();
-      drawSingleEvent(shapeEvent);
-      onDraw(shapeEvent);
+      const committedCtx = getCommittedContext();
+      drawEventOnContext(committedCtx, shapeEvent);
+
+      previewEventRef.current = null;
+      clearPreviewCanvas();
+
+      onDraw?.(shapeEvent);
     }
 
-    setIsDrawing(false);
+    isDrawingRef.current = false;
     startPointRef.current = null;
+    lastPointRef.current = null;
   };
 
+  const handlePointerLeave = () => {
+    isDrawingRef.current = false;
+    startPointRef.current = null;
+    lastPointRef.current = null;
+    previewEventRef.current = null;
+    clearPreviewCanvas();
+  };
+
+  useEffect(() => {
+    return () => {
+      if (previewFrameRef.current) {
+        cancelAnimationFrame(previewFrameRef.current);
+      }
+    };
+  }, []);
+
   return (
-    <div className="w-full h-full relative">
+    <div className="relative h-full w-full min-h-[500px]">
       <canvas
-        ref={canvasRef}
-        className="w-full h-full touch-none cursor-crosshair"
+        ref={committedCanvasRef}
+        className="absolute inset-0 h-full w-full touch-none cursor-crosshair"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onPointerLeave={() => setIsDrawing(false)}
+        onPointerLeave={handlePointerLeave}
       />
 
-      <div className="absolute inset-0 pointer-events-none">
+      <canvas
+        ref={previewCanvasRef}
+        className="pointer-events-none absolute inset-0 h-full w-full"
+      />
+
+      <div className="pointer-events-none absolute inset-0">
         {Object.values(cursors).map((cursor) => (
           <div
             key={cursor.userId}

@@ -1,45 +1,21 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { formatDrawingEvent } from "../../utils/eventFormatter";
 
-function getUserColor(userId) {
-  const colors = [
-    "#2563eb",
-    "#dc2626",
-    "#16a34a",
-    "#ca8a04",
-    "#9333ea",
-    "#ea580c",
-    "#0891b2",
-    "#db2777",
-  ];
-
-  const id = String(userId || "");
-  const index =
-    id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) %
-    colors.length;
-
-  return colors[index];
-}
-
+console.log("🔥 CANVAS FILE LOADED");
 export default function WhiteboardCanvas({
   drawingEvents,
   onDraw,
   onCursorMove,
   cursors = {},
   currentUser,
-  tool = "pencil",
-  color = "#000000",
+  tool,
+  color,
 }) {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const startPointRef = useRef(null);
   const lastSentRef = useRef(0);
   const lastCursorSentRef = useRef(0);
-  const lastRenderedCountRef = useRef(0);
-
-  const currentUserColor = useMemo(() => {
-    return getUserColor(currentUser?.id);
-  }, [currentUser]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -54,7 +30,6 @@ export default function WhiteboardCanvas({
 
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
-
     return () => window.removeEventListener("resize", resizeCanvas);
   }, []);
 
@@ -73,15 +48,16 @@ export default function WhiteboardCanvas({
 
     if (!parsed?.start || !parsed?.end) return;
 
-    const eventTool = event.tool || event.eventType || "pencil";
-    const strokeColor =
-      eventTool === "eraser"
-        ? "#0b0b12"
-        : parsed.color || event.color || "#000000";
+    // 🔥 ERASER FIX
+    if (parsed.tool === "eraser") {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.lineWidth = 20;
+    } else {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = parsed.color || "#000";
+      ctx.lineWidth = 2;
+    }
 
-    ctx.strokeStyle = strokeColor;
-    ctx.fillStyle = strokeColor;
-    ctx.lineWidth = eventTool === "eraser" ? 12 : 2;
     ctx.lineCap = "round";
 
     if (eventTool === "rectangle") {
@@ -111,24 +87,10 @@ export default function WhiteboardCanvas({
   const redrawCanvas = () => {
     clearCanvas();
     drawingEvents.forEach(drawSingleEvent);
-    lastRenderedCountRef.current = drawingEvents.length;
   };
 
   useEffect(() => {
     if (!canvasRef.current) return;
-
-    if (drawingEvents.length === 0) {
-      clearCanvas();
-      lastRenderedCountRef.current = 0;
-      return;
-    }
-
-    if (drawingEvents.length === lastRenderedCountRef.current + 1) {
-      drawSingleEvent(drawingEvents[drawingEvents.length - 1]);
-      lastRenderedCountRef.current = drawingEvents.length;
-      return;
-    }
-
     redrawCanvas();
   }, [drawingEvents]);
 
@@ -150,12 +112,14 @@ export default function WhiteboardCanvas({
   };
 
   const handlePointerMove = (e) => {
+    console.log("TOOL:", tool); 
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const point = getCanvasCoordinates(e);
     const now = Date.now();
 
+    /* CURSOR */
     if (now - lastCursorSentRef.current >= 30) {
       lastCursorSentRef.current = now;
 
@@ -198,14 +162,17 @@ export default function WhiteboardCanvas({
     canvas.dataset.lastX = end.x;
     canvas.dataset.lastY = end.y;
 
-    const localEvent = {
+    const event = {
       coordinates: { start, end },
       color,
-      tool,
+      tool, // 🔥 IMPORTANT
     };
 
-    drawSingleEvent(localEvent);
-    onDraw(localEvent);
+    // LOCAL DRAW
+    drawSingleEvent(event);
+
+    // SEND TO SERVER
+    onDraw(event);
   };
 
   const handlePointerUp = (e) => {
@@ -255,27 +222,29 @@ export default function WhiteboardCanvas({
             }}
           >
             <div className="flex flex-col items-center">
+
               <div
                 style={{
                   width: "10px",
                   height: "10px",
                   borderRadius: "50%",
-                  background: cursor.color || currentUserColor,
+                  background: cursor.color || "#fff",
                   border: "2px solid white",
                 }}
               />
+
               <span
                 style={{
                   fontSize: "10px",
                   background: "rgba(0,0,0,0.7)",
                   color: "white",
-                  padding: "2px 4px",
-                  borderRadius: "4px",
-                  marginTop: "2px",
+                  padding: "2px 6px",
+                  borderRadius: "6px",
+                  marginTop: "4px",
                   whiteSpace: "nowrap",
                 }}
               >
-                {cursor.displayName}
+                {cursor.displayName || "User"}
               </span>
             </div>
           </div>

@@ -7,16 +7,17 @@ export default function Toolbar({
   onToolChange,
   onLeave,
 }) {
-  const toolButtonClass = (toolName) =>
+  const buttonClass = (active) =>
     `w-10 h-10 rounded-xl flex items-center justify-center transition ${
-      tool === toolName
-        ? "bg-blue-500 text-white"
-        : "bg-white/10 hover:bg-blue-500"
+      active
+        ? "bg-blue-500 scale-110"
+        : "bg-white/10 hover:bg-blue-500 hover:scale-105"
     }`;
 
   return (
     <div className="flex flex-col items-center gap-4">
-      {/* COLOR */}
+
+      {/* 🎨 COLOR */}
       <input
         type="color"
         value={color}
@@ -24,37 +25,49 @@ export default function Toolbar({
         className="w-10 h-10 rounded-xl border border-white/20 bg-transparent cursor-pointer"
       />
 
-      {/* TOOLS */}
+      {/* ✏️ PENCIL */}
       <button
         onClick={() => onToolChange("pencil")}
-        className={toolButtonClass("pencil")}
+        className={buttonClass(tool === "pencil")}
         title="Pencil"
       >
         ✏️
       </button>
 
+      {/* 🧽 ERASER */}
+      <button
+        onClick={() => onToolChange("eraser")}
+        className={buttonClass(tool === "eraser")}
+        title="Eraser"
+      >
+        🧽
+      </button>
+
+      {/* ⬛ RECTANGLE */}
       <button
         onClick={() => onToolChange("rectangle")}
-        className={toolButtonClass("rectangle")}
-        title="Rectangle"
+        className={buttonClass(tool === "rectangle")}
+        title="Rectangle (coming next)"
       >
         ⬛
       </button>
 
+      {/* ⚪ CIRCLE */}
       <button
         onClick={() => onToolChange("circle")}
-        className={toolButtonClass("circle")}
-        title="Circle"
+        className={buttonClass(tool === "circle")}
+        title="Circle (coming next)"
       >
         ⚪
       </button>
 
       <div className="h-6" />
 
-      {/* LEAVE */}
+      {/* 🚪 LEAVE */}
       <button
         onClick={onLeave}
         className="w-10 h-10 rounded-xl bg-red-500 hover:bg-red-400 flex items-center justify-center transition"
+        title="Leave Room"
       >
         🚪
       </button>

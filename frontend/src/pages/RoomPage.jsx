@@ -158,10 +158,17 @@ export default function RoomPage() {
   const [color, setColor] = useState("#3b82f6");
   const [tool, setTool] = useState("pencil");
 
+  // ✅ TOOL STATE
+  const [tool, setTool] = useState("pencil");
+
   const [joinRoom] = useMutation(JOIN_ROOM);
   const [leaveRoom] = useMutation(LEAVE_ROOM);
   const [sendDrawingEvent] = useMutation(SEND_DRAWING_EVENT);
   const [sendCursorEvent] = useMutation(SEND_CURSOR_EVENT);
+
+  const { data: roomData } = useQuery(GET_ROOM, {
+    variables: { roomId },
+  });
 
   const { data: historyData } = useQuery(BOARD_HISTORY, {
     variables: { roomId },
@@ -320,7 +327,8 @@ export default function RoomPage() {
           roomId,
           eventType: event.tool || "pencil",
           coordinates: event.coordinates,
-          color: event.color || color,
+          color,
+          // ❌ tool REMOVED (fixes error)
           timestamp: new Date().toISOString(),
         },
       },
@@ -381,7 +389,11 @@ export default function RoomPage() {
     <div className="relative min-h-[calc(100vh-73px)] overflow-hidden bg-white text-black dark:bg-[#0b0b12] dark:text-white">
       <div className="absolute top-20 left-1/2 z-40 flex w-[90%] max-w-6xl -translate-x-1/2 items-center justify-between rounded-2xl border border-black/10 bg-black/5 px-6 py-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
         <div className="flex items-center gap-4">
-          <h1 className="text-lg font-semibold">Main Whiteboard's Room</h1>
+          <h1 className="text-lg font-semibold">
+            {roomData?.room?.name
+              ? `${roomData.room.name}'s Room`
+              : `Room ${roomId}`}
+          </h1>
 
           <span className="text-sm text-gray-600 dark:text-gray-400">
             👥 {participants.length}
@@ -409,12 +421,12 @@ export default function RoomPage() {
 
       <div className="absolute left-4 top-1/2 z-50 -translate-y-1/2">
         <div className="flex flex-col items-center gap-4 rounded-2xl border border-black/10 bg-black/5 p-3 shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
-          <Toolbar
+          <Toolbar 
             color={color}
             onColorChange={setColor}
             tool={tool}
             onToolChange={setTool}
-            onLeave={handleLeave}
+            onLeave={() => {}}
           />
         </div>
       </div>
@@ -424,7 +436,7 @@ export default function RoomPage() {
 
         <WhiteboardCanvas
           drawingEvents={drawingEvents}
-          onDraw={handleDraw}
+          onDraw={(event) => handleDraw({ ...event, tool })}
           onCursorMove={handleCursorMove}
           cursors={cursors}
           currentUser={user}

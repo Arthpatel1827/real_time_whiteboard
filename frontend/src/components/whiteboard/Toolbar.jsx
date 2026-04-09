@@ -61,7 +61,6 @@ export default function Toolbar({
         ⚪
       </button>
 
-      {/* SPACER */}
       <div className="h-6" />
 
       {/* 🚪 LEAVE */}

@@ -13,10 +13,10 @@ export default function WhiteboardCanvas({
 }) {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const startPointRef = useRef(null);
   const lastSentRef = useRef(0);
   const lastCursorSentRef = useRef(0);
 
-  /* ================= RESIZE ================= */
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -32,8 +32,6 @@ export default function WhiteboardCanvas({
     window.addEventListener("resize", resizeCanvas);
     return () => window.removeEventListener("resize", resizeCanvas);
   }, []);
-
-  /* ================= DRAW ================= */
 
   const clearCanvas = () => {
     const canvas = canvasRef.current;
@@ -62,6 +60,24 @@ export default function WhiteboardCanvas({
 
     ctx.lineCap = "round";
 
+    if (eventTool === "rectangle") {
+      const width = parsed.end.x - parsed.start.x;
+      const height = parsed.end.y - parsed.start.y;
+      ctx.strokeRect(parsed.start.x, parsed.start.y, width, height);
+      return;
+    }
+
+    if (eventTool === "circle") {
+      const radius = Math.sqrt(
+        Math.pow(parsed.end.x - parsed.start.x, 2) +
+          Math.pow(parsed.end.y - parsed.start.y, 2)
+      );
+      ctx.beginPath();
+      ctx.arc(parsed.start.x, parsed.start.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    }
+
     ctx.beginPath();
     ctx.moveTo(parsed.start.x, parsed.start.y);
     ctx.lineTo(parsed.end.x, parsed.end.y);
@@ -78,8 +94,6 @@ export default function WhiteboardCanvas({
     redrawCanvas();
   }, [drawingEvents]);
 
-  /* ================= POINTER ================= */
-
   const getCanvasCoordinates = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
     return {
@@ -89,8 +103,9 @@ export default function WhiteboardCanvas({
   };
 
   const handlePointerDown = (e) => {
-    setIsDrawing(true);
     const start = getCanvasCoordinates(e);
+    setIsDrawing(true);
+    startPointRef.current = start;
 
     canvasRef.current.dataset.lastX = start.x;
     canvasRef.current.dataset.lastY = start.y;
@@ -115,6 +130,21 @@ export default function WhiteboardCanvas({
     }
 
     if (!isDrawing) return;
+
+    if (tool === "rectangle" || tool === "circle") {
+      redrawCanvas();
+
+      drawSingleEvent({
+        coordinates: {
+          start: startPointRef.current,
+          end: point,
+        },
+        color,
+        tool,
+      });
+
+      return;
+    }
 
     if (now - lastSentRef.current < 20) return;
     lastSentRef.current = now;
@@ -145,26 +175,41 @@ export default function WhiteboardCanvas({
     onDraw(event);
   };
 
-  const handlePointerUp = () => {
-    setIsDrawing(false);
-  };
+  const handlePointerUp = (e) => {
+    if (!isDrawing) return;
 
-  /* ================= UI ================= */
+    const end = getCanvasCoordinates(e);
+
+    if (tool === "rectangle" || tool === "circle") {
+      const shapeEvent = {
+        coordinates: {
+          start: startPointRef.current,
+          end,
+        },
+        color,
+        tool,
+      };
+
+      redrawCanvas();
+      drawSingleEvent(shapeEvent);
+      onDraw(shapeEvent);
+    }
+
+    setIsDrawing(false);
+    startPointRef.current = null;
+  };
 
   return (
     <div className="w-full h-full relative">
-
-      {/* 🎨 CANVAS */}
       <canvas
         ref={canvasRef}
         className="w-full h-full touch-none cursor-crosshair"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
+        onPointerLeave={() => setIsDrawing(false)}
       />
 
-      {/* 👥 CURSORS */}
       <div className="absolute inset-0 pointer-events-none">
         {Object.values(cursors).map((cursor) => (
           <div
@@ -201,7 +246,6 @@ export default function WhiteboardCanvas({
               >
                 {cursor.displayName || "User"}
               </span>
-
             </div>
           </div>
         ))}

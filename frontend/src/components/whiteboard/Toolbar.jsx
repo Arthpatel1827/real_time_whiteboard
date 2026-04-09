@@ -52,12 +52,12 @@ export default function Toolbar({
       <div className="h-6" />
 
       {/* LEAVE */}
-      <button
+      {/* <button
         onClick={onLeave}
         className="w-10 h-10 rounded-xl bg-red-500 hover:bg-red-400 flex items-center justify-center transition"
       >
         🚪
-      </button>
+      </button> */}
     </div>
   );
 }

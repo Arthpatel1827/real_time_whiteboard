@@ -158,8 +158,8 @@ export default function RoomPage() {
 
   const drawBufferRef = useRef([]);
   const flushFrameRef = useRef(null);
+  const seenEventIdsRef = useRef(new Set());
 
-  const lastDrawSentAtRef = useRef(0);
   const lastCursorSentAtRef = useRef(0);
 
   const user = getStoredUser();
@@ -304,6 +304,10 @@ export default function RoomPage() {
         ? history.slice(lastClearIndex + 1)
         : history;
 
+    seenEventIdsRef.current = new Set(
+      visibleEvents.map((event) => event.id).filter(Boolean)
+    );
+
     drawBufferRef.current = [];
     setDrawingEvents(visibleEvents);
   }, [historyData]);
@@ -328,6 +332,14 @@ export default function RoomPage() {
   useEffect(() => {
     const event = subscriptionData?.drawingUpdates;
     if (!event) return;
+
+    if (event.id && seenEventIdsRef.current.has(event.id)) {
+      return;
+    }
+
+    if (event.id) {
+      seenEventIdsRef.current.add(event.id);
+    }
 
     if (event.eventType === "clear") {
       drawBufferRef.current = [];
@@ -358,14 +370,7 @@ export default function RoomPage() {
   }, []);
 
   const handleDraw = (event) => {
-    const now = performance.now();
     const eventType = event.tool || "pencil";
-
-    if (eventType === "pencil" && now - lastDrawSentAtRef.current < 32) {
-      return;
-    }
-
-    lastDrawSentAtRef.current = now;
 
     sendDrawingEvent({
       variables: {
@@ -385,6 +390,7 @@ export default function RoomPage() {
   const handleClear = async () => {
     drawBufferRef.current = [];
     setDrawingEvents([]);
+    seenEventIdsRef.current.clear();
 
     try {
       await sendDrawingEvent({
@@ -407,7 +413,7 @@ export default function RoomPage() {
     if (!user) return;
 
     const now = performance.now();
-    if (now - lastCursorSentAtRef.current < 60) {
+    if (now - lastCursorSentAtRef.current < 90) {
       return;
     }
 

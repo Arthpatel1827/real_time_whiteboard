@@ -16,13 +16,15 @@ class DrawingService:
         color: str = None,
         timestamp: str = None,
     ):
+        safe_coordinates = coordinates or {}
+
         with get_db() as db:
             event = DrawingEvent(
                 room_id=int(roomId),
                 user_id=int(userId),
                 event_type=eventType,
                 event_data={
-                    "coordinates": coordinates,
+                    "coordinates": safe_coordinates,
                     "color": color,
                     "timestamp": timestamp,
                 },
@@ -30,12 +32,13 @@ class DrawingService:
             db.add(event)
             db.commit()
             db.refresh(event)
+
             return {
                 "id": str(event.id),
                 "roomId": str(event.room_id),
                 "userId": str(event.user_id),
                 "eventType": event.event_type,
-                "coordinates": coordinates,
+                "coordinates": safe_coordinates,
                 "color": color,
                 "timestamp": timestamp,
             }
@@ -46,18 +49,19 @@ class DrawingService:
             events = (
                 db.query(DrawingEvent)
                 .filter(DrawingEvent.room_id == int(room_id))
-                .order_by(DrawingEvent.created_at)
+                .order_by(DrawingEvent.created_at, DrawingEvent.id)
                 .all()
             )
+
             return [
                 {
                     "id": str(event.id),
                     "roomId": str(event.room_id),
                     "userId": str(event.user_id),
                     "eventType": event.event_type,
-                    "coordinates": event.event_data.get("coordinates", {}),
-                    "color": event.event_data.get("color"),
-                    "timestamp": event.event_data.get("timestamp"),
+                    "coordinates": (event.event_data or {}).get("coordinates", {}),
+                    "color": (event.event_data or {}).get("color"),
+                    "timestamp": (event.event_data or {}).get("timestamp"),
                 }
                 for event in events
             ]

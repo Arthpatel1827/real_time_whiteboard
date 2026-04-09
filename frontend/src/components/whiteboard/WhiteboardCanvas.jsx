@@ -21,18 +21,40 @@ function getUserColor(userId) {
   return colors[index];
 }
 
-function getStrokeColor(event, parsed) {
-  return parsed?.color || event?.color || "#000000";
+function drawPath(ctx, points, strokeColor) {
+  if (!ctx || !Array.isArray(points) || points.length < 2) return;
+
+  ctx.strokeStyle = strokeColor;
+  ctx.fillStyle = strokeColor;
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+
+  for (let i = 1; i < points.length; i += 1) {
+    ctx.lineTo(points[i].x, points[i].y);
+  }
+
+  ctx.stroke();
 }
 
 function drawEventOnContext(ctx, event) {
   if (!ctx || !event) return;
 
   const parsed = formatDrawingEvent(event);
-  if (!parsed?.start || !parsed?.end) return;
+  if (!parsed) return;
 
   const eventTool = event.tool || event.eventType || "pencil";
-  const strokeColor = getStrokeColor(event, parsed);
+  const strokeColor = parsed.color || event.color || "#000000";
+
+  if (eventTool === "pencil" && parsed.points?.length >= 2) {
+    drawPath(ctx, parsed.points, strokeColor);
+    return;
+  }
+
+  if (!parsed.start || !parsed.end) return;
 
   ctx.strokeStyle = strokeColor;
   ctx.fillStyle = strokeColor;
@@ -79,11 +101,14 @@ export default function WhiteboardCanvas({
   const isDrawingRef = useRef(false);
   const startPointRef = useRef(null);
   const lastPointRef = useRef(null);
-  const lastSentRef = useRef(0);
   const lastCursorSentRef = useRef(0);
   const lastRenderedCountRef = useRef(0);
   const previewFrameRef = useRef(null);
   const previewEventRef = useRef(null);
+
+  const strokeBufferRef = useRef([]);
+  const lastStrokeFlushAtRef = useRef(0);
+  const STROKE_FLUSH_MS = 80;
 
   const currentUserColor = useMemo(() => {
     return getUserColor(currentUser?.id);
@@ -206,18 +231,38 @@ export default function WhiteboardCanvas({
     previewFrameRef.current = requestAnimationFrame(renderPreview);
   };
 
+  const flushStrokeBuffer = () => {
+    if (strokeBufferRef.current.length < 2) return;
+
+    onDraw?.({
+      tool: "pencil",
+      color,
+      coordinates: {
+        points: [...strokeBufferRef.current],
+      },
+    });
+
+    const lastPoint = strokeBufferRef.current[strokeBufferRef.current.length - 1];
+    strokeBufferRef.current = lastPoint ? [lastPoint] : [];
+  };
+
   const handlePointerDown = (e) => {
     const start = getCanvasCoordinates(e);
     isDrawingRef.current = true;
     startPointRef.current = start;
     lastPointRef.current = start;
+
+    if (tool === "pencil") {
+      strokeBufferRef.current = [start];
+      lastStrokeFlushAtRef.current = performance.now();
+    }
   };
 
   const handlePointerMove = (e) => {
     const point = getCanvasCoordinates(e);
     const now = performance.now();
 
-    if (now - lastCursorSentRef.current >= 60) {
+    if (now - lastCursorSentRef.current >= 90) {
       lastCursorSentRef.current = now;
       onCursorMove?.({ x: point.x, y: point.y });
     }
@@ -238,39 +283,20 @@ export default function WhiteboardCanvas({
       return;
     }
 
-    if (now - lastSentRef.current < 32) {
-      previewEventRef.current = {
-        coordinates: {
-          start: lastPointRef.current,
-          end: point,
-        },
-        color,
-        tool,
-      };
-      schedulePreviewRender();
-      return;
+    if (tool === "pencil") {
+      const committedCtx = getCommittedContext();
+      if (!committedCtx || !lastPointRef.current) return;
+
+      drawPath(committedCtx, [lastPointRef.current, point], color);
+
+      strokeBufferRef.current.push(point);
+      lastPointRef.current = point;
+
+      if (now - lastStrokeFlushAtRef.current >= STROKE_FLUSH_MS) {
+        flushStrokeBuffer();
+        lastStrokeFlushAtRef.current = now;
+      }
     }
-
-    lastSentRef.current = now;
-
-    const localEvent = {
-      coordinates: {
-        start: lastPointRef.current,
-        end: point,
-      },
-      color,
-      tool,
-    };
-
-    const committedCtx = getCommittedContext();
-    drawEventOnContext(committedCtx, localEvent);
-
-    previewEventRef.current = null;
-    clearPreviewCanvas();
-
-    lastPointRef.current = point;
-
-    onDraw?.(localEvent);
   };
 
   const handlePointerUp = (e) => {
@@ -297,9 +323,24 @@ export default function WhiteboardCanvas({
       onDraw?.(shapeEvent);
     }
 
+    if (tool === "pencil") {
+      if (
+        !lastPointRef.current ||
+        lastPointRef.current.x !== end.x ||
+        lastPointRef.current.y !== end.y
+      ) {
+        strokeBufferRef.current.push(end);
+      }
+
+      flushStrokeBuffer();
+      strokeBufferRef.current = [];
+    }
+
     isDrawingRef.current = false;
     startPointRef.current = null;
     lastPointRef.current = null;
+    previewEventRef.current = null;
+    clearPreviewCanvas();
   };
 
   const handlePointerLeave = () => {
@@ -307,6 +348,7 @@ export default function WhiteboardCanvas({
     startPointRef.current = null;
     lastPointRef.current = null;
     previewEventRef.current = null;
+    strokeBufferRef.current = [];
     clearPreviewCanvas();
   };
 
@@ -319,7 +361,7 @@ export default function WhiteboardCanvas({
   }, []);
 
   return (
-    <div className="relative h-full w-full min-h-[500px]">
+    <div className="relative h-full w-full">
       <canvas
         ref={committedCanvasRef}
         className="absolute inset-0 h-full w-full touch-none cursor-crosshair"
